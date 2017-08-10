@@ -1,0 +1,22 @@
+{
+  "name": "binary-encoding",
+  "main": "binary-encoding.js",
+  "license": "MIT",
+  "engines": {
+    "node": ">=6.5.0"
+  },
+  "description": "Binary_Encoding encodes objects into buffers. Binary_Encoding. Record encodes a table id and the key and value components of a record into a buffer.",
+  "author": "James Vickers <james@metabench.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/metabench/binary-encoding.git"
+  },
+  "dependencies": {
+    "xas2": "^0.0.8",
+    "jsgui3": "^0.0.4"
+  },
+  "files": [
+    "binary-encoding.js"
+  ],
+  "version": "0.0.27"
+}
