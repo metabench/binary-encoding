@@ -40,6 +40,22 @@ var tof = jsgui.tof;
 // 9  - buffer of binary data
 // 10 - array                     l, sequence of encoded items
 
+// Satoshi 32 bit number
+//  Positive integer number of satoshis. Ie good at representing fractions up to 10 decimal places (or is it 9?)
+
+
+
+// 2^2 (4) items
+// x    false, false
+// x+1  false, true
+// x+2  true, false
+// x+3  true, true
+
+// 2^4 (16) items - Seems like a useful use of encoding space.
+// x    false, false, false, false
+//  ...
+// x+15 true, true, true, true
+
 
 const XAS2 = 0;
 const DOUBLEBE = 1;
@@ -55,6 +71,15 @@ const BUFFER = 9;
 // Specifically want to encode array as well.
 
 const ARRAY = 10;
+
+
+const SATOSHI_32 = 20;
+
+
+// Reencoding existing field values within the database will be possible.
+//  Can convert number fields to satoshi 32 within the records.
+//   Would most likely save space.
+
 
 
 
@@ -1196,6 +1221,7 @@ var decode_length_item_encoded_buffer = (buf, num_xas2_prefixes = 0) => {
 
 }
 
+Binary_Encoding.join_buffer_pair = join_buffer_pair;
 Binary_Encoding.split_length_item_encoded_buffer_to_kv = split_length_item_encoded_buffer_to_kv;
 Binary_Encoding.split_length_item_encoded_buffer = split_length_item_encoded_buffer;
 Binary_Encoding.decode_first_value_xas2_from_buffer = decode_first_value_xas2_from_buffer;
