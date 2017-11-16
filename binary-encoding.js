@@ -16,9 +16,10 @@ var xas2 = require('xas2');
 // Currently deals with xas2 to encode integers.
 //  Want to also encode strings in the beginning and mid points of a record/key/value. Should say the length of the string, should identify it's a string?
 
-var jsgui = require('jsgui3');
-var each = jsgui.each;
-var tof = jsgui.tof;
+var lang = require('lang-mini');
+var each = lang.each;
+var tof = lang.tof;
+var is_defined = lang.is_defined;
 
 
 // 01/08/2017 - Looks like this will need to get a bit more complicated, with storing the data types, and sometimes the lengths, within the encoding itself.
@@ -51,7 +52,7 @@ var tof = jsgui.tof;
 // x+2  true, false
 // x+3  true, true
 
-// 2^4 (16) items - Seems like a useful use of encoding space.
+// 2^4 (16) items - Seems like a useful use of encoding space. Could get 8 bool flags within 2 bytes.
 // x    false, false, false, false
 //  ...
 // x+15 true, true, true, true
@@ -1035,6 +1036,7 @@ var encode_to_buffer = Binary_Encoding.encode_to_buffer = function (arr_items, k
     });
 
     //var res_1 = Buffer.concat(arr_bufs);
+    //console.log('res_buffers', res_buffers);
     var res = Buffer.concat(res_buffers);
 
     /*
@@ -1091,18 +1093,23 @@ var encode_pair_to_buffers = Binary_Encoding.encode_pair_to_buffers = function (
 
     var a = arguments;
     var arr_xas2_prefix_numbers = [];
+    //console.log('a.length', a.length);
     if (a.length >= 2) {
         for (var c = 1; c < a.length; c++) {
-            arr_xas2_prefix_numbers.push(a[c]);
+            //console.log('c', c);
+            //console.log('a[c]', a[c])
+            if (is_defined(a[c])) arr_xas2_prefix_numbers.push(a[c]);
         }
     }
 
     var prefix_buffers = [];
 
+    //console.log('arr_xas2_prefix_numbers', arr_xas2_prefix_numbers);
+
     each(arr_xas2_prefix_numbers, (prefix_number) => {
         prefix_buffers.push(xas2(prefix_number).buffer);
     });
-    //console.log('prefix_buffers', prefix_buffers);
+    //console.log('1) prefix_buffers', prefix_buffers);
     
 
 
@@ -1111,7 +1118,7 @@ var encode_pair_to_buffers = Binary_Encoding.encode_pair_to_buffers = function (
     
     var res_key_0 = encode_to_buffer(arr_pair[0]);
     prefix_buffers.push(res_key_0);
-    //console.log('prefix_buffers', prefix_buffers);
+    //console.log('2) prefix_buffers', prefix_buffers);
     var res_key = Buffer.concat(prefix_buffers);
 
 

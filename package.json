@@ -13,10 +13,10 @@
   },
   "dependencies": {
     "xas2": "^0.0.10",
-    "jsgui3": "^0.0.8"
+    "lang-mini": "^0.0.1"
   },
   "files": [
     "binary-encoding.js"
   ],
-  "version": "0.0.30"
+  "version": "0.0.31"
 }
