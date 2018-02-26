@@ -1,0 +1,3 @@
+Need to get compression of buffers working. Make it an option that's simple to use. Could use compress(buffer) function, or give it as an option at other times, such as compression when encoding a buffer.
+
+
