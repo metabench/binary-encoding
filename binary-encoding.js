@@ -41,6 +41,7 @@ var lang = require('lang-mini');
 var each = lang.each;
 var tof = lang.tof;
 var is_defined = lang.is_defined;
+let deep_equal = lang.deep_equal;
 
 var zlib = require('zlib');
 
@@ -112,7 +113,9 @@ const BUFFER = 9;
 // Specifically want to encode array as well.
 
 const ARRAY = 10;
-const COMPRESSED_BUFFER = 11;
+const OBJECT = 11;
+const COMPRESSED_BUFFER = 12;
+
 
 // Not sure about this. Using float64s looks best for now.
 const SATOSHI_32 = 20;
@@ -198,100 +201,102 @@ var compress_buffer_zlib9 = (buf) => {
 // Binary_Record_Encoding
 //  Has both key and value
 
-var encode_item = function(encoding_type, item) {
-	//console.log('');
-	//console.log('encode_item encoding_type', encoding_type);
+var encode_item = function (encoding_type, item) {
+    //console.log('');
+    //console.log('encode_item encoding_type', encoding_type);
     //console.log('item', item);
 
     //console.trace();
 
-	var field_name;        // may ignore this
-    var str_type;          // the important thing
+    var field_name; // may ignore this
+    var str_type; // the important thing
     var i_type;
 
-	var res;
+    var res;
 
-	// dt32
+    // dt32
 
-	if (encoding_type.length === 1) {
-		//field_name = encoding_type[0];
-		//str_type = encoding_type[1];
+    if (encoding_type.length === 1) {
+        //field_name = encoding_type[0];
+        //str_type = encoding_type[1];
 
-		if (encoding_type[0] === 'dt32') {
-			field_name = 'datetime';
+        if (encoding_type[0] === 'dt32') {
+            field_name = 'datetime';
             str_type = 'dt32';
             i_type = 2;
-			//str_type = 'xas2';
-		}
-		if (encoding_type[0] === 'id') {
-			field_name = 'id';
+            //str_type = 'xas2';
+        }
+        if (encoding_type[0] === 'id') {
+            field_name = 'id';
             str_type = 'xas2';
             i_type = 0;
-		}
-		if (encoding_type[0] === 'name') {
-			field_name = 'name';
+        }
+        if (encoding_type[0] === 'name') {
+            field_name = 'name';
             str_type = 'string';
             i_type = 4;
-		}
-	}
+        }
+    }
 
-	if (encoding_type.length === 2) {
-		field_name = encoding_type[0];
-		// Check to see if it's a string?
-		str_type = encoding_type[1];
-	}
+    if (encoding_type.length === 2) {
+        field_name = encoding_type[0];
+        // Check to see if it's a string?
+        str_type = encoding_type[1];
+    }
 
 
-	var further_encoding_params;
-	if (encoding_type.length === 3) {
-		field_name = encoding_type[0];
-		str_type = encoding_type[1];
-		further_encoding_params = encoding_type.slice(2);
-		//console.log('further_encoding_params', further_encoding_params);
-	}
-	//console.log('field_name', field_name);
-	//console.log('str_type', str_type);
+    var further_encoding_params;
+    if (encoding_type.length === 3) {
+        field_name = encoding_type[0];
+        str_type = encoding_type[1];
+        further_encoding_params = encoding_type.slice(2);
+        //console.log('further_encoding_params', further_encoding_params);
+    }
+    //console.log('field_name', field_name);
+    //console.log('str_type', str_type);
     if (str_type === 'xas2') {
         i_type = 0;
-		res = xas2(item).buffer;
-	} else if (str_type === 'dt32') {
-		// It's a 64 bit integer.
-		//  Think the milliseconds from JavaScript is 64 bit (or more than 32 at least).
-		//  Maybe xas2 instead for this?
+        res = xas2(item).buffer;
+    } else if (str_type === 'dt32') {
+        // It's a 64 bit integer.
+        //  Think the milliseconds from JavaScript is 64 bit (or more than 32 at least).
+        //  Maybe xas2 instead for this?
         i_type = 2;
 
-		res = Buffer.alloc(6);
-		res.writeUIntBE(item, 0, 6);
-		//res = xas2(item).buffer;
-	} else {
-		//console.log('encoding_type', encoding_type);
-		//console.log('str_type', str_type);
+        res = Buffer.alloc(6);
+        res.writeUIntBE(item, 0, 6);
+        //res = xas2(item).buffer;
+    } else {
+        //console.log('encoding_type', encoding_type);
+        //console.log('str_type', str_type);
         if (str_type === 'indexed') {
             // indexed integer
             i_type = 5;
 
 
-			var arr_index = further_encoding_params[0];
-			// then the arr of indexed values are in the next part.
-			//  Could slow it down creating a map to see which item it is, or searching for them.
-			var found = false, i = 0, l = arr_index.length;
-			while (!found && i < l) {
-				//console.log('arr_index[i]', arr_index[i]);
-				found = arr_index[i++] === item;
-			}
-			if (found) {
-				res = xas2(i - 1).buffer;
-			} else {
-				throw 'item not found in index'
-			}
+            var arr_index = further_encoding_params[0];
+            // then the arr of indexed values are in the next part.
+            //  Could slow it down creating a map to see which item it is, or searching for them.
+            var found = false,
+                i = 0,
+                l = arr_index.length;
+            while (!found && i < l) {
+                //console.log('arr_index[i]', arr_index[i]);
+                found = arr_index[i++] === item;
+            }
+            if (found) {
+                res = xas2(i - 1).buffer;
+            } else {
+                throw 'item not found in index'
+            }
 
-		} else if (str_type === 'string') {
-			// If its the last string then just write the string.
-			//  Otherwise will need to indicate the length of the string with an xas2, then write the string.
+        } else if (str_type === 'string') {
+            // If its the last string then just write the string.
+            //  Otherwise will need to indicate the length of the string with an xas2, then write the string.
 
-			// xstring type?
-			//  or convert the non-last ones to xstring type automatically?
-			//  Or another parameter called encode_string_length, with default value of false?
+            // xstring type?
+            //  or convert the non-last ones to xstring type automatically?
+            //  Or another parameter called encode_string_length, with default value of false?
 
             // Don't need to encode that it is a string. That is known from the schema, and keeping track of position with sequential reads.
             //  Need to encode its length to start with though.
@@ -311,28 +316,28 @@ var encode_item = function(encoding_type, item) {
 
         } else if (str_type === 'f64be') {
             i_type = 1;
-			res = Buffer.alloc(8);
-			res.writeDoubleBE(item, 0);
+            res = Buffer.alloc(8);
+            res.writeDoubleBE(item, 0);
         } else if (str_type === 'bool') {
             i_type = 6;
-			res = Buffer.alloc(1);
-			if (item === true || item === 1) {
-				res.writeInt8(1, 0);
-			} else {
-				res.writeInt8(0, 0);
-			}
-			//res.writeDoubleBE(item, 0);
-		}
-		//throw 'stop';
+            res = Buffer.alloc(1);
+            if (item === true || item === 1) {
+                res.writeInt8(1, 0);
+            } else {
+                res.writeInt8(0, 0);
+            }
+            //res.writeDoubleBE(item, 0);
+        }
+        //throw 'stop';
     }
 
-   // var res2 = xas2(i_type
+    // var res2 = xas2(i_type
     var buf_i = Buffer.alloc(1);
     buf_i.writeInt8(i_type, 0);
     var res2 = Buffer.concat([buf_i, res]);
 
-	//if (str_type)
-	//return res;
+    //if (str_type)
+    //return res;
     return res2;
 };
 
@@ -343,32 +348,32 @@ class Binary_Encoding {
     // Should not necessarily need an encoding object.
     //  In many cases, just give it the values, and it will get on with encoding them into buffers.
 
-    'constructor'(spec) {
+    'constructor' (spec) {
 
 
-		var arr_encodings = [];
-		if (Array.isArray(spec)) {
-			arr_encodings = spec;
-		}
+        var arr_encodings = [];
+        if (Array.isArray(spec)) {
+            arr_encodings = spec;
+        }
         if (arr_encodings) this.arr_encodings = arr_encodings;
     }
-	'encode'(unencoded) {
+    'encode' (unencoded) {
         return Binary_Encoding.encode_to_buffer(unencoded);
-	}
-	'decode'(buffer, ignore_prefix) {
-		var arr_encodings = this.arr_encodings;
-		var read_pos = 0;
+    }
+    'decode' (buffer, ignore_prefix) {
+        var arr_encodings = this.arr_encodings;
+        var read_pos = 0;
 
-		var field_name, str_type, pos, val, arr_additional_encoding_params, read_val, prefix;
-		var res = [];
-		pos = 0;
+        var field_name, str_type, pos, val, arr_additional_encoding_params, read_val, prefix;
+        var res = [];
+        pos = 0;
 
-		if (ignore_prefix) {
-			[prefix, pos] = xas2.read(buffer, 0);
-		}
+        if (ignore_prefix) {
+            [prefix, pos] = xas2.read(buffer, 0);
+        }
 
-		return res;
-	}
+        return res;
+    }
 }
 
 
@@ -380,65 +385,66 @@ class Binary_Encoding {
 
 
 class Binary_Record_Encoding {
-	'constructor'(spec) {
-		this.encoding = spec;
-		this.key_encoding = new Binary_Encoding(spec.key);
-		this.value_encoding = new Binary_Encoding(spec.value);
-	}
+    'constructor' (spec) {
+        this.encoding = spec;
+        this.key_encoding = new Binary_Encoding(spec.key);
+        this.value_encoding = new Binary_Encoding(spec.value);
+    }
 
-	'encode_query'(query) {
-		return this.key_encoding.encode_query(query);
-	}
+    'encode_query' (query) {
+        return this.key_encoding.encode_query(query);
+    }
 
-	// And a tables key prefix
-	//  Something to indicate we are in the tables section of the database
+    // And a tables key prefix
+    //  Something to indicate we are in the tables section of the database
 
-	'encode'(int_table_prefix, record) {
-		var arr_key_values = [], arr_value_values = [];
+    'encode' (int_table_prefix, record) {
+        var arr_key_values = [],
+            arr_value_values = [];
 
-		var num_key_values = this.key_encoding.arr_encodings.length;
-		//console.log('num_key_values', num_key_values);
+        var num_key_values = this.key_encoding.arr_encodings.length;
+        //console.log('num_key_values', num_key_values);
 
-		// Include the table prefix in the key
+        // Include the table prefix in the key
 
-		each(record, (value, i) => {
-			if (i < num_key_values) {
-				arr_key_values.push(value);
-			} else {
-				arr_value_values.push(value);
-			}
-		});
-		var x_prefix = xas2(int_table_prefix);
+        each(record, (value, i) => {
+            if (i < num_key_values) {
+                arr_key_values.push(value);
+            } else {
+                arr_value_values.push(value);
+            }
+        });
+        var x_prefix = xas2(int_table_prefix);
 
-		var encoded_key_values = this.key_encoding.encode(arr_key_values);
-
-
-		var res = [Buffer.concat([x_prefix.buffer, encoded_key_values]), this.value_encoding.encode(arr_value_values)];
-
-		// Encodes the key and value to separate buffers.
+        var encoded_key_values = this.key_encoding.encode(arr_key_values);
 
 
+        var res = [Buffer.concat([x_prefix.buffer, encoded_key_values]), this.value_encoding.encode(arr_value_values)];
 
-		return res;
+        // Encodes the key and value to separate buffers.
 
-	}
 
-	'decode'(arr_key_value) {
-		// And the table prefix has been removed from the buffer before it was even given to the decoder.
-		//  Fixed on 02/11/2016
+
+        return res;
+
+    }
+
+    'decode' (arr_key_value) {
+        // And the table prefix has been removed from the buffer before it was even given to the decoder.
+        //  Fixed on 02/11/2016
 
         // 02/08/2017 - Needs some generalised decoding work.
         //  binary-encoding will hold some small info about the data types used, so it will be able to read an array of values relatively easily.
-		// we have the key and the value from the db
-		var key = arr_key_value[0];
-		var value = arr_key_value[1];
+        // we have the key and the value from the db
+        var key = arr_key_value[0];
+        var value = arr_key_value[1];
 
-		var t_key, t_value;
-		var b_key, b_value;
+        var t_key, t_value;
+        var b_key, b_value;
 
-		if (key instanceof Buffer) {
-			b_key = key;
-		} else {
+        if (key instanceof Buffer) {
+            b_key = key;
+        } else {
             t_key = typeof key;
 
 
@@ -446,35 +452,35 @@ class Binary_Record_Encoding {
             if (t_key === 'string') {
 
 
-				b_key = Buffer.from(key, 'hex');
-			}
-		}
+                b_key = Buffer.from(key, 'hex');
+            }
+        }
 
-		if (value instanceof Buffer) {
-			b_value = value;
-		} else {
-			t_value = typeof value;
-			if (t_value === 'string') {
-				b_value = Buffer.from(value, 'hex');
-			}
-		}
+        if (value instanceof Buffer) {
+            b_value = value;
+        } else {
+            t_value = typeof value;
+            if (t_value === 'string') {
+                b_value = Buffer.from(value, 'hex');
+            }
+        }
 
-		// then need to read the table key prefix.
+        // then need to read the table key prefix.
 
-		// Removes the table prefix key as part of the decoder.
+        // Removes the table prefix key as part of the decoder.
 
-		var [table_index_key_prefix, prefix_key_length] = xas2.read(b_key, 0);
-		//var prefix_key_length = x_prefix.length;
-		//console.log('prefix_key_length', prefix_key_length);
-		var key_without_prefix_key = b_key.slice(prefix_key_length);
-		var decoded_key = this.key_encoding.decode(key_without_prefix_key);
+        var [table_index_key_prefix, prefix_key_length] = xas2.read(b_key, 0);
+        //var prefix_key_length = x_prefix.length;
+        //console.log('prefix_key_length', prefix_key_length);
+        var key_without_prefix_key = b_key.slice(prefix_key_length);
+        var decoded_key = this.key_encoding.decode(key_without_prefix_key);
 
-		//console.log('decoded_key', decoded_key);
-		// decode the value too.
+        //console.log('decoded_key', decoded_key);
+        // decode the value too.
 
-		var decoded_value = this.value_encoding.decode(b_value);
-		return [decoded_key, decoded_value];
-	}
+        var decoded_value = this.value_encoding.decode(b_value);
+        return [decoded_key, decoded_value];
+    }
 }
 
 var i_type_buffer = function (i_type) {
@@ -489,7 +495,8 @@ Binary_Encoding.Record = Binary_Record_Encoding;
 var get_row_buffers = Binary_Encoding.get_row_buffers = (buf_encoded) => {
     // read xas2, see the length of the row
 
-    var pos = 0, length, l = buf_encoded.length;
+    var pos = 0,
+        length, l = buf_encoded.length;
     var old_pos;
     var done = false;
     var res = [];
@@ -522,12 +529,13 @@ var get_row_buffers = Binary_Encoding.get_row_buffers = (buf_encoded) => {
 var evented_get_row_buffers = Binary_Encoding.evented_get_row_buffers = (buf_encoded, cb_row) => {
     // read xas2, see the length of the row
 
-    var pos = 0, length, l = buf_encoded.length;
+    var pos = 0,
+        length, l = buf_encoded.length;
     var old_pos;
     var done = false;
     var res = [];
     var arr_row;
-    
+
     //console.log('buf_encoded', buf_encoded);
     while (!done) {
         [length, pos] = xas2.read(buf_encoded, pos);
@@ -566,9 +574,14 @@ var flexi_encode_item = Binary_Encoding.flexi_encode_item = (item) => {
     //  Or a difference where it has an item entry saying how many items there are.
 
 
-    var t_item = tof(item), res;
+    var t_item = tof(item),
+        res;
     var i_type;
     // Include item type encoding?
+
+    //console.log('t_item', t_item);
+
+    //console.log('t_item', t_item);
     if (t_item === 'number') {
         // is it a positive integer? xas2 only stores 0 and positive integers
         if (item === 0) {
@@ -638,15 +651,50 @@ var flexi_encode_item = Binary_Encoding.flexi_encode_item = (item) => {
 
         var buf_enc = encode_to_buffer(item);
 
+        //console.log('buf_enc', buf_enc);
+        //console.log('buf_enc.length', buf_enc.length);
+
         // Length in bytes?
         //  Length in terms of number of items to read?
         //   This is preferable as it's smaller.
         //   Makes reading the results harder though. Easier to know the size of the data structure in bytes.
 
         var arr_bufs = [xas2(buf_enc.length).buffer, buf_enc];
+        //console.log('arr_bufs', arr_bufs);
         res = Buffer.concat(arr_bufs);
     }
-    
+
+    if (t_item === 'object') {
+        // String key, then the value encoded into a buffer
+        //  prefixed with its encoded length
+
+        //console.log('encoding object');
+        i_type = OBJECT;
+
+        let prop;
+        let arr_bufs_res = [];
+        let buf_item_item, item_item, buf_item_item_name;
+
+        for (prop in item) {
+            item_item = item[prop];
+            buf_item_item_name = Buffer.from(prop);
+            buf_item_item = flexi_encode_item(item_item);
+            //console.log('item_item', item_item);
+            //console.log('buf_item_item', buf_item_item);
+            arr_bufs_res.push(xas2(buf_item_item_name.length).buffer);
+            arr_bufs_res.push(buf_item_item_name);
+            arr_bufs_res.push(xas2(buf_item_item.length).buffer);
+            arr_bufs_res.push(buf_item_item);
+        }
+
+        // Have the length of the object at the start for better skipping and reading.
+        //console.log('arr_bufs_res', arr_bufs_res);
+
+        let buf_res = Buffer.concat(arr_bufs_res);
+        res = Buffer.concat([xas2(buf_res.length).buffer, buf_res]);
+    }
+
+    // Maybe types should be as xas2.
     var res_arr = [i_type_buffer(i_type)];
 
     if (res) {
@@ -658,7 +706,7 @@ var flexi_encode_item = Binary_Encoding.flexi_encode_item = (item) => {
         //var res2 = Buffer.concat([, res]);
     }
     var res2 = Buffer.concat(res_arr);
-
+    //console.log('res2', res2);
     return res2;
 }
 
@@ -678,7 +726,7 @@ var encode_to_buffer = function (arr_items, key_prefix) {
 
 
     var a = arguments;
-    
+
     var a = arguments;
     var arr_xas2_prefix_numbers = [];
     //console.log('a', a);
@@ -695,7 +743,7 @@ var encode_to_buffer = function (arr_items, key_prefix) {
         //console.log('new_buf', new_buf);
         prefix_buffers.push(new_buf);
     });
-    
+
     var i_prefix;
     var arr_bufs = [];
     if (a.length === 1) {
@@ -740,7 +788,7 @@ var encode_pair_to_buffers = Binary_Encoding.encode_pair_to_buffers = function (
         }
     }
     var prefix_buffers = [];
-    
+
     each(arr_xas2_prefix_numbers, (prefix_number) => {
         prefix_buffers.push(xas2(prefix_number).buffer);
     });
@@ -769,7 +817,8 @@ var decode_first_value_xas2_from_buffer = (buf) => {
 var split_length_item_encoded_buffer = (buf) => {
     var res = [];
     var pos = 0;
-    var l = buf.length, l_item, buf_item, next_pos;
+    var l = buf.length,
+        l_item, buf_item, next_pos;
 
     var read = function () {
         [l_item, pos] = xas2.read(buf, pos);
@@ -791,7 +840,8 @@ var split_length_item_encoded_buffer = (buf) => {
 var split_length_item_encoded_buffer_to_kv = (buf) => {
     var res = [];
     var pos = 0;
-    var l = buf.length, l_item, buf_item, next_pos;
+    var l = buf.length,
+        l_item, buf_item, next_pos;
 
     var key, value;
 
@@ -825,7 +875,8 @@ var split_length_item_encoded_buffer_to_kv = (buf) => {
 var decode_length_item_encoded_buffer = (buf, num_xas2_prefixes = 0) => {
     var res = [];
     var pos = 0;
-    var l = buf.length, l_item, buf_item, next_pos;
+    var l = buf.length,
+        l_item, buf_item, next_pos;
 
     var read = function () {
         [l_item, pos] = xas2.read(buf, pos);
@@ -862,15 +913,15 @@ const BUFFER = 9;
 // decode recursive
 //  if it finds a buffer inside, decodes that
 
-var full_decode = function(buf, num_xas2_prefixes = 0) {
+var full_decode = function (buf, num_xas2_prefixes = 0) {
     var decoded = decode_buffer(buf, num_xas2_prefixes);
 
     // buffer in an array...
-    console.log('1) decoded');
+    //console.log('1) decoded');
 
     var is_fully_decoded = !(decoded[0] instanceof Buffer);
-    while(!is_fully_decoded) {
-        console.log('decoded[0]', decoded[0]);
+    while (!is_fully_decoded) {
+        //console.log('decoded[0]', decoded[0]);
         decoded[0] = decode_buffer(decoded[0], num_xas2_prefixes);
         is_fully_decoded = !(decoded[0] instanceof Buffer);
     }
@@ -881,6 +932,8 @@ var full_decode = function(buf, num_xas2_prefixes = 0) {
 }
 
 
+// Want to encode and decode single items
+
 var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_prefixes = 0) {
 
     // Always an array of items.
@@ -889,14 +942,39 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
 
     //console.log('has_xas2_prefix', has_xas2_prefix);
 
+
+    // Should not automatically decode any list of items into an array.
+    //  Sequence of xas2 numbers will always be in an array.
+    //   So if there are key prefixes, put it around an array.
+
+    // This buffer encoding generally denotes a list of items, in an array.
+    //  The array can be assumed in some situations but not others.
+
+    // This seems like it should return an array of items in some cases.
+    //  In other cases, it should be treated as though it is decoding a single item. That item could be an array with multiple items.
+
+    // Need it so that in cases where there is just one item encoded, it returns that item, not an array of items.
+
+
+    // If there are any xas2 prefixes it puts all of the results in an array.
+
+
+
+
+
+
+
+
     var arr_items = [];
     var i_prefix;
     var pos = 0;
 
+    //console.log('decode_buffer', buf);
+
     //console.log('num_xas2_prefixes', num_xas2_prefixes);
 
     // A buffer can say it's got these prefixes.
-    
+
 
 
     while (num_xas2_prefixes > 0) {
@@ -906,14 +984,14 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
         arr_items.push(i_prefix);
         num_xas2_prefixes = num_xas2_prefixes - 1;
     }
-    
+
     var l = buf.length;
     //console.log('l', l);
 
     // Need to read the buffer at multiple points to see what the item is encoded as.
 
     // May as well have the new decoding here.
-    
+
     var i_byte_value_type;
     var complete = false;
 
@@ -924,6 +1002,9 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
     //console.log('pos', pos);
     //if (pos >= l - 1) complete = true;
     if (pos >= l) complete = true;
+
+
+    //If returning just one result, then don't put it in an array?
 
 
     while (!complete) {
@@ -972,8 +1053,19 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
         } else if (i_byte_value_type === NULL) {
             arr_items.push(null);
         } else if (i_byte_value_type === BUFFER) {
-            throw 'stop';
-            arr_items.push(null);
+
+            [buf_len, pos] = xas2.read(buf, pos);
+            // It's length encoded in the buffer.
+            //console.log('buf_len', buf_len);
+
+            var buf2 = Buffer.alloc(buf_len);
+            buf.copy(buf2, 0, pos, pos + buf_len);
+
+            //console.trace();
+
+
+            //throw 'stop';
+            arr_items.push(buf2);
         } else if (i_byte_value_type === ARRAY) {
             //console.log('reading array');
 
@@ -987,6 +1079,74 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
             var decoded = Binary_Encoding.decode_buffer(buf_arr);
             arr_items.push(decoded);
             pos = pos + buf_len;
+        } else if (i_byte_value_type === OBJECT) {
+            //console.log('reading array');
+
+            let pos_start = pos;
+
+
+            // Read the full length of the object in bytes.
+            [buf_len, pos] = xas2.read(buf, pos);
+            //console.log('buf_len', buf_len);
+
+            let read_end = pos_start + buf_len;
+            //var buf_obj = Buffer.alloc(buf_len);
+
+
+
+            //buf.copy(buf_obj, 0, pos, pos + buf_len);
+            //console.log('buf_obj', buf_obj);
+
+            // 
+
+            let obj = {};
+
+            let k_l, v_l, buf_k, buf_v, k, v;
+
+            let read_complete = false;
+
+            while (!read_complete) {
+                [k_l, pos] = xas2.read(buf, pos);
+                //console.log('k_l', k_l);
+                buf_k = Buffer.alloc(k_l);
+                buf.copy(buf_k, 0, pos, pos + buf_len);
+                pos = pos + k_l;
+
+                k = buf_k.toString();
+
+                [v_l, pos] = xas2.read(buf, pos);
+                //console.log('v_l', v_l);
+                buf_v = Buffer.alloc(v_l);
+
+                buf.copy(buf_v, 0, pos, pos + buf_len);
+                pos = pos + v_l;
+
+                v = decode_buffer(buf_v)[0];
+                //console.log('v', v);
+
+
+
+                //console.log('buf_k', buf_k);
+                //console.log('buf_v', buf_v);
+
+                obj[k] = v;
+
+                if (pos >= read_end) read_complete = true;
+
+                // Then copy the buffer for the key.
+                //  Read string from buffer?
+
+
+
+            }
+
+            //var decoded = Binary_Encoding.decode_buffer(buf_obj);
+
+
+            //console.log('obj', obj);
+            //throw 'stop';
+            arr_items.push(obj);
+            //pos = pos + buf_len;
         } else if (i_byte_value_type === COMPRESSED_BUFFER) {
             //throw 'stop';
             //arr_items.push(null);
@@ -1021,10 +1181,41 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
         if (pos >= l) complete = true;
     }
 
+    // Seems like a bit of a hack. Would fix / break things in other places.
+    //  Need to specifically cater for returning an array with length 1.
+
+    /*
+    if (arr_items.length === 1) {
+        if (i_byte_value_type === ARRAY) {
+            //return arr_items;
+            //return arr_items[0];
+        } else {
+            return arr_items[0];
+        }
+
+
+    } else {
+        return arr_items;
+    }
+    */
+
+    return arr_items;
+
+
+
 
     //if ()
-    return arr_items;
+
 }
+
+// Could have decode_item function if fishing it out of an array is a problem.
+//  Because of the whole row and record encoding system, we need to decode into an array when not reading it sequentially.
+//  Decoding iterator would be useful.
+
+
+
+
+Binary_Encoding.decode = decode_buffer;
 
 
 Binary_Encoding.join_buffer_pair = join_buffer_pair;
@@ -1037,17 +1228,69 @@ Binary_Encoding.compress_buffer_zlib9 = compress_buffer_zlib9;
 
 module.exports = Binary_Encoding;
 
-
-
-
 if (require.main === module) {
+    let test_encode_decode = (item) => {
+        let b = Binary_Encoding.flexi_encode_item(item);
+        //console.log('b', b);
+
+        // Incorporate fishing it out of item 0.
+
+        let a2 = Binary_Encoding.decode(b)[0];
+        console.log('item', item);
+        console.log('a2', a2);
+
+        let pass = deep_equal(item, a2);
+        console.log('pass', pass);
+    }
+
+    let a1 = [
+        [1, 2, 3],
+        [4, 5, 6]
+    ];
+
+    // Decoding it always seems to put the results into an array.
+    //  Don't want that.
+
+    /*
+    test_encode_decode([]);
+    test_encode_decode([
+        [],
+        []
+    ]);
+    */
+
+    let test_obj = (obj) => {
+        obj = obj || {
+            'str_key_1': [],
+            'str_key_2': [1, 2, 3],
+            'str_key_3': {
+                'hello': 'world'
+            }
+        }
+        let b = Binary_Encoding.flexi_encode_item(obj);
+        console.log('b', b);
+
+        let d = Binary_Encoding.decode(b)[0];
+
+        console.log('d', d);
+
+    }
+    test_obj({
+        'a': 'b'
+    });
+    test_obj();
+    //test_encode_decode(a1);
+    //test_encode_decode('James');
+    //test_encode_decode(['James']);
+    //test_encode_decode(['James', 'Vickers']);
 
 
-
+    // a1 [ [ 1, 2, 3 ], [ 4, 5, 6 ] ]
+    //a2 [ [ [ 1, 2, 3 ], [ 4, 5, 6 ] ] ]
 
 
 
 
 } else {
-	//console.log('required as a module');
+    //console.log('required as a module');
 }
