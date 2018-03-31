@@ -13,10 +13,10 @@
   },
   "dependencies": {
     "xas2": "^0.0.12",
-    "lang-mini": "^0.0.4"
+    "lang-mini": "^0.0.5"
   },
   "files": [
     "binary-encoding.js"
   ],
-  "version": "0.0.37"
+  "version": "0.0.39"
 }

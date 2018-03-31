@@ -1216,7 +1216,8 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
 
 
 Binary_Encoding.decode = decode_buffer;
-
+Binary_Encoding.encode = flexi_encode_item;
+Binary_Encoding.flexi_encode = flexi_encode_item;
 
 Binary_Encoding.join_buffer_pair = join_buffer_pair;
 Binary_Encoding.split_length_item_encoded_buffer_to_kv = split_length_item_encoded_buffer_to_kv;
