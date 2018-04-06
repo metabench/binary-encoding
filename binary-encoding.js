@@ -330,7 +330,6 @@ var encode_item = function (encoding_type, item) {
         }
         //throw 'stop';
     }
-
     // var res2 = xas2(i_type
     var buf_i = Buffer.alloc(1);
     buf_i.writeInt8(i_type, 0);
@@ -349,8 +348,6 @@ class Binary_Encoding {
     //  In many cases, just give it the values, and it will get on with encoding them into buffers.
 
     'constructor' (spec) {
-
-
         var arr_encodings = [];
         if (Array.isArray(spec)) {
             arr_encodings = spec;
@@ -363,7 +360,6 @@ class Binary_Encoding {
     'decode' (buffer, ignore_prefix) {
         var arr_encodings = this.arr_encodings;
         var read_pos = 0;
-
         var field_name, str_type, pos, val, arr_additional_encoding_params, read_val, prefix;
         var res = [];
         pos = 0;
@@ -371,11 +367,9 @@ class Binary_Encoding {
         if (ignore_prefix) {
             [prefix, pos] = xas2.read(buffer, 0);
         }
-
         return res;
     }
 }
-
 
 // This may be changed / merged into NextlevelDB-Record
 
@@ -492,6 +486,8 @@ var i_type_buffer = function (i_type) {
 
 Binary_Encoding.Record = Binary_Record_Encoding;
 
+
+/*
 var get_row_buffers = Binary_Encoding.get_row_buffers = (buf_encoded) => {
     // read xas2, see the length of the row
 
@@ -524,7 +520,7 @@ var get_row_buffers = Binary_Encoding.get_row_buffers = (buf_encoded) => {
     //var res = [buf_key, buf_value];
     return res;
 }
-
+*/
 
 var evented_get_row_buffers = Binary_Encoding.evented_get_row_buffers = (buf_encoded, cb_row) => {
     // read xas2, see the length of the row
@@ -772,35 +768,21 @@ var encode_to_buffer = function (arr_items, key_prefix) {
 }
 
 
+
 var join_buffer_pair = Binary_Encoding.join_buffer_pair = (arr_pair) => {
     var res = Buffer.concat([xas2(arr_pair[0].length).buffer, arr_pair[0], xas2(arr_pair[1].length).buffer, arr_pair[1]]);
     return res;
 }
 
-var encode_pair_to_buffers = Binary_Encoding.encode_pair_to_buffers = function (arr_pair, key_prefix) {
-    var a = arguments;
-    var arr_xas2_prefix_numbers = [];
-    if (a.length >= 2) {
-        for (var c = 1; c < a.length; c++) {
-            //console.log('c', c);
-            //console.log('a[c]', a[c])
-            if (is_defined(a[c])) arr_xas2_prefix_numbers.push(a[c]);
-        }
-    }
-    var prefix_buffers = [];
-
-    each(arr_xas2_prefix_numbers, (prefix_number) => {
-        prefix_buffers.push(xas2(prefix_number).buffer);
-    });
-    var res_key_0 = encode_to_buffer(arr_pair[0]);
-    prefix_buffers.push(res_key_0);
-    var res_key = Buffer.concat(prefix_buffers);
-    var res_val = encode_to_buffer(arr_pair[1]);
-    var res = [res_key, res_val];
-    return res;
 
 
-}
+// move to database encoding
+//  then may be worth separating it out of the project to keep it stable.
+//   keep it on an old and low version for a while hopefully.
+//   Then the encoding would be better separated to make run with C / C++
+
+
+
 
 
 
@@ -1176,6 +1158,7 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
 
         } else {
             console.trace();
+            //throw 'stop';
             throw 'Unexpected i_byte_value_type', i_byte_value_type;
         }
         if (pos >= l) complete = true;
@@ -1276,10 +1259,13 @@ if (require.main === module) {
         console.log('d', d);
 
     }
-    test_obj({
-        'a': 'b'
-    });
-    test_obj();
+    //test_obj({
+    //    'a': 'b'
+    //});
+    //test_obj();
+
+    test_encode_decode(0);
+
     //test_encode_decode(a1);
     //test_encode_decode('James');
     //test_encode_decode(['James']);
