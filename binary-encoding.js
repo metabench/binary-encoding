@@ -487,7 +487,7 @@ var i_type_buffer = function (i_type) {
 Binary_Encoding.Record = Binary_Record_Encoding;
 
 
-/*
+
 var get_row_buffers = Binary_Encoding.get_row_buffers = (buf_encoded) => {
     // read xas2, see the length of the row
 
@@ -520,7 +520,6 @@ var get_row_buffers = Binary_Encoding.get_row_buffers = (buf_encoded) => {
     //var res = [buf_key, buf_value];
     return res;
 }
-*/
 
 var evented_get_row_buffers = Binary_Encoding.evented_get_row_buffers = (buf_encoded, cb_row) => {
     // read xas2, see the length of the row
@@ -787,6 +786,7 @@ var join_buffer_pair = Binary_Encoding.join_buffer_pair = (arr_pair) => {
 
 
 var decode_first_value_xas2_from_buffer = (buf) => {
+    //console.log('buf', buf);
     var i_prefix, pos;
     [i_prefix, pos] = xas2.read(buf, 0);
     return i_prefix;
@@ -915,6 +915,243 @@ var full_decode = function (buf, num_xas2_prefixes = 0) {
 
 
 // Want to encode and decode single items
+//  This looks very skippable for selecting individual items from a buffer.
+
+let decode_buffer_select_by_index = (buf, arr_int_indexes) => {
+
+    var arr_items = [];
+    var pos = 0;
+    var l = buf.length;
+
+    var i_byte_value_type;
+    var complete = false;
+
+    var buf_val, val;
+    var i_res, num_res, str_len, str_res, arr_len, arr_res, buf_len;
+    var compression_type, compressed_length, buf_uncomp;
+
+    let map_indexes_to_select = {};
+    each(arr_int_indexes, item => map_indexes_to_select[item] = true);
+
+    //console.log('pos', pos);
+    //if (pos >= l - 1) complete = true;
+    if (pos >= l) complete = true;
+
+
+    // Skips decoding of items not in the right idx.
+
+    let c_idx = 0;
+
+    while (!complete) {
+        i_byte_value_type = buf.readUInt8(pos++);
+        //console.log('i_byte_value_type', i_byte_value_type);
+        //console.log('buf', buf);
+        //console.log('pos', pos);
+        //console.log('has_xas2_prefix', has_xas2_prefix);
+
+        // Could have BOOL_TRUE and BOOL_FALSE as separate items.
+
+
+        // 0 - xas2 number
+        // 1 - 64 bit BE float
+        // 2 - unix time in ms           t
+        // 3 - unix time range in ms     [t, t]
+        // 4 - string                    [xas2(l), str]  'utf8'
+        // 5 - indexed xas2 number, representing a string
+        // 6 - bool, 1 byte
+
+
+        if (map_indexes_to_select[c_idx++]) {
+
+            if (i_byte_value_type === XAS2) {
+                [i_res, pos] = xas2.read(buf, pos);
+                arr_items.push(i_res);
+            } else if (i_byte_value_type === DOUBLEBE) {
+                num_res = buf.readDoubleBE(pos);
+                arr_items.push(num_res);
+                pos = pos + 8;
+            } else if (i_byte_value_type === 2) {
+
+            } else if (i_byte_value_type === 3) {
+
+            } else if (i_byte_value_type === STRING) {
+                [str_len, pos] = xas2.read(buf, pos);
+                str_res = buf.toString('utf8', pos, pos + str_len);
+                arr_items.push(str_res);
+                pos = pos + str_len;
+
+            } else if (i_byte_value_type === 5) {
+
+            } else if (i_byte_value_type === BOOL_TRUE) {
+                arr_items.push(true);
+            } else if (i_byte_value_type === BOOL_FALSE) {
+                arr_items.push(false);
+            } else if (i_byte_value_type === NULL) {
+                arr_items.push(null);
+            } else if (i_byte_value_type === BUFFER) {
+                [buf_len, pos] = xas2.read(buf, pos);
+                var buf2 = Buffer.alloc(buf_len);
+                buf.copy(buf2, 0, pos, pos + buf_len);
+                arr_items.push(buf2);
+                pos = pos + buf_len;
+            } else if (i_byte_value_type === ARRAY) {
+                [buf_len, pos] = xas2.read(buf, pos);
+                var buf_arr = Buffer.alloc(buf_len);
+                buf.copy(buf_arr, 0, pos, pos + buf_len);
+                var decoded = Binary_Encoding.decode_buffer(buf_arr);
+                arr_items.push(decoded);
+                pos = pos + buf_len;
+            } else if (i_byte_value_type === OBJECT) {
+                let pos_start = pos;
+                [buf_len, pos] = xas2.read(buf, pos);
+                let read_end = pos_start + buf_len;
+                let obj = {};
+
+                let k_l, v_l, buf_k, buf_v, k, v;
+
+                let read_complete = false;
+
+                while (!read_complete) {
+                    [k_l, pos] = xas2.read(buf, pos);
+                    //console.log('k_l', k_l);
+                    buf_k = Buffer.alloc(k_l);
+                    buf.copy(buf_k, 0, pos, pos + k_l);
+                    pos = pos + k_l;
+                    k = buf_k.toString();
+                    [v_l, pos] = xas2.read(buf, pos);
+                    //console.log('v_l', v_l);
+                    buf_v = Buffer.alloc(v_l);
+                    buf.copy(buf_v, 0, pos, pos + v_l);
+                    pos = pos + v_l;
+                    v = decode_buffer(buf_v)[0];
+                    obj[k] = v;
+                    if (pos >= read_end) read_complete = true;
+                }
+                arr_items.push(obj);
+            } else if (i_byte_value_type === COMPRESSED_BUFFER) {
+                [compression_type, pos] = xas2.read(buf, pos);
+                [compressed_length, pos] = xas2.read(buf, pos);
+                var buf_comp = Buffer.alloc(compressed_length);
+                buf.copy(buf_comp, 0, pos, pos + compressed_length);
+
+                if (compression_type === COMPRESSION_ZLIB_9) {
+                    buf_uncomp = zlib_uncompress_buffer(buf_comp);
+                } else {
+                    throw 'unknown compression type ' + compression_type;
+                }
+
+                // just return the buffer?
+                //var decoded = 
+                arr_items.push(buf_uncomp);
+                pos = pos + compressed_length;
+
+
+                //var decoded = decode_buffer(buf_uncomp);
+
+
+            } else {
+                console.trace();
+                //throw 'stop';
+                throw 'Unexpected i_byte_value_type', i_byte_value_type;
+            }
+
+
+        } else {
+
+            if (i_byte_value_type === XAS2) {
+                [i_res, pos] = xas2.skip(buf, pos);
+            } else if (i_byte_value_type === DOUBLEBE) {
+                pos = pos + 8;
+            } else if (i_byte_value_type === 2) {
+
+            } else if (i_byte_value_type === 3) {
+
+            } else if (i_byte_value_type === STRING) {
+                [str_len, pos] = xas2.read(buf, pos);
+                pos = pos + str_len;
+            } else if (i_byte_value_type === 5) {
+
+            } else if (i_byte_value_type === BOOL_TRUE) {
+                //arr_items.push(true);
+            } else if (i_byte_value_type === BOOL_FALSE) {
+                //arr_items.push(false);
+            } else if (i_byte_value_type === NULL) {
+                //arr_items.push(null);
+            } else if (i_byte_value_type === BUFFER) {
+                [buf_len, pos] = xas2.read(buf, pos);
+                //var buf2 = Buffer.alloc(buf_len);
+                buf.copy(buf2, 0, pos, pos + buf_len);
+                arr_items.push(buf2);
+            } else if (i_byte_value_type === ARRAY) {
+                [buf_len, pos] = xas2.read(buf, pos);
+                pos = pos + buf_len;
+            } else if (i_byte_value_type === OBJECT) {
+                let pos_start = pos;
+                [buf_len, pos] = xas2.read(buf, pos);
+                let read_end = pos_start + buf_len;
+                //let obj = {};
+
+                let k_l, v_l, buf_k, buf_v, k, v;
+
+                let read_complete = false;
+
+                while (!read_complete) {
+                    [k_l, pos] = xas2.read(buf, pos);
+                    //console.log('k_l', k_l);
+                    buf_k = Buffer.alloc(k_l);
+                    //buf.copy(buf_k, 0, pos, pos + buf_len);
+                    pos = pos + k_l;
+                    //k = buf_k.toString();
+                    [v_l, pos] = xas2.read(buf, pos);
+                    //console.log('v_l', v_l);
+                    //buf_v = Buffer.alloc(v_l);
+                    //buf.copy(buf_v, 0, pos, pos + buf_len);
+                    pos = pos + v_l;
+                    //v = decode_buffer(buf_v)[0];
+                    //obj[k] = v;
+                    if (pos >= read_end) read_complete = true;
+                }
+                //arr_items.push(obj);
+            } else if (i_byte_value_type === COMPRESSED_BUFFER) {
+                [compression_type, pos] = xas2.read(buf, pos);
+                [compressed_length, pos] = xas2.read(buf, pos);
+                var buf_comp = Buffer.alloc(compressed_length);
+                buf.copy(buf_comp, 0, pos, pos + compressed_length);
+
+                if (compression_type === COMPRESSION_ZLIB_9) {
+                    buf_uncomp = zlib_uncompress_buffer(buf_comp);
+                } else {
+                    throw 'unknown compression type ' + compression_type;
+                }
+
+                // just return the buffer?
+                //var decoded = 
+                arr_items.push(buf_uncomp);
+                pos = pos + compressed_length;
+
+
+                //var decoded = decode_buffer(buf_uncomp);
+
+
+            } else {
+                console.trace();
+                //throw 'stop';
+                throw 'Unexpected i_byte_value_type', i_byte_value_type;
+            }
+
+        }
+
+
+        if (pos >= l) complete = true;
+    }
+
+    return arr_items;
+
+
+
+
+
+}
 
 var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_prefixes = 0) {
 
@@ -1091,7 +1328,7 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
                 [k_l, pos] = xas2.read(buf, pos);
                 //console.log('k_l', k_l);
                 buf_k = Buffer.alloc(k_l);
-                buf.copy(buf_k, 0, pos, pos + buf_len);
+                buf.copy(buf_k, 0, pos, pos + k_l);
                 pos = pos + k_l;
 
                 k = buf_k.toString();
@@ -1100,7 +1337,7 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
                 //console.log('v_l', v_l);
                 buf_v = Buffer.alloc(v_l);
 
-                buf.copy(buf_v, 0, pos, pos + buf_len);
+                buf.copy(buf_v, 0, pos, pos + v_l);
                 pos = pos + v_l;
 
                 v = decode_buffer(buf_v)[0];
@@ -1258,13 +1495,17 @@ if (require.main === module) {
 
         console.log('d', d);
 
+        let pass = deep_equal(obj, d);
+        console.log('pass', pass);
+
     }
     //test_obj({
     //    'a': 'b'
     //});
     //test_obj();
 
-    test_encode_decode(0);
+    test_obj();
+    //test_encode_decode(0);
 
     //test_encode_decode(a1);
     //test_encode_decode('James');
