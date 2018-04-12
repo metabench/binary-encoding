@@ -829,6 +829,7 @@ var split_length_item_encoded_buffer_to_kv = (buf) => {
 
     var read = function () {
         [l_item, pos] = xas2.read(buf, pos);
+        //console.log('l_item', l_item);
         //res.push(xas2(l_item).buffer);
         buf_item = Buffer.alloc(l_item);
         next_pos = pos + l_item;
@@ -914,10 +915,255 @@ var full_decode = function (buf, num_xas2_prefixes = 0) {
 }
 
 
+
+// Will be used to make selection from records a lot faster.
+//  Less server-side CPU usage.
+
+
+// xas2.read_buffer - now exists
+//  does not read an xas2, just returns the buffer. xas2 needed because we don't know the item length in advance.
+
+// Does not decode to make the index-based selection. Useful when selecting on the server, transferring results to the client.
+
+//  and return the total read too.
+
+// Starting index - meaning we process a buffer, but consider each item to be index_number plus the starting_index.
+
+
+
+
+let buffer_select_from_buffer = (buf, arr_int_indexes, num_kps_encoded, num_kps_to_skip, starting_idx = 0) => {
+
+    let arr_buf_res = [];
+    var pos = 0;
+    var l = buf.length;
+    var i_byte_value_type, buffer_length;
+    var complete = false;
+
+    let map_indexes_to_select = {};
+    each(arr_int_indexes, item => map_indexes_to_select[item - starting_idx] = true);
+
+
+
+    let kp, num_read_kps = 0,
+        num_skipped_kps = 0;
+    // need to read the KPs.
+
+    //console.log('num_kps, num_kps_to_skip', num_kps_encoded, num_kps_to_skip);
+
+    while (num_read_kps++ < num_kps_encoded) {
+        [kp, pos] = xas2.read(buf, pos);
+
+        //console.log('kp', kp);
+
+        if (num_skipped_kps < num_kps_to_skip) {
+            num_skipped_kps++;
+            num_read_kps++;
+        } else {
+            num_read_kps++
+            arr_items.push(kp);
+        }
+
+    }
+
+
+    if (pos >= l) complete = true;
+
+
+
+
+    // Skip necessary kps.
+
+
+
+    // Skips decoding of items not in the right idx.
+
+    let c_idx = 0;
+
+    let buf_item, buf_xas2_item;
+
+    while (!complete) {
+        i_byte_value_type = buf.readUInt8(pos++);
+        //console.log('i_byte_value_type', i_byte_value_type);
+
+
+        if (map_indexes_to_select[c_idx++]) {
+            // read it and copy to result buffer, don't decode it.
+
+            if (i_byte_value_type === XAS2) {
+
+                // Copy the xas2...
+
+                //console.log('reading xas2');
+
+                // read buffer, and return the full thing.
+
+
+                [buf_xas2_item, pos] = xas2.read_buffer(buf, pos);
+
+                buf_item = Buffer.concat([xas2(0).buffer, buf_xas2_item]);
+
+                //console.log('[buf_item, pos]', [buf_item, pos]);
+
+                //[i_res, pos] = xas2.skip(buf, pos);
+            } else if (i_byte_value_type === DOUBLEBE) {
+                // Read this value.
+                //  copy given length to other buffer
+
+                buf_item = Buffer.alloc(9);
+                buf_item.writeUInt8(i_byte_value_type, 0);
+                buf.copy(buf_item, 1, pos, pos + 8);
+
+
+
+                pos = pos + 8;
+                //} else if (i_byte_value_type === 2) {
+
+                //} else if (i_byte_value_type === 3) {
+
+            } else if (i_byte_value_type === STRING || i_byte_value_type === BUFFER || i_byte_value_type === ARRAY || i_byte_value_type === OBJECT) {
+                // xas2 read return the number of characters read too?
+                let orig_pos = pos;
+                [len, pos, xas2_buffer_length] = xas2.read(buf, pos);
+
+                xas2_buffer_length = pos - orig_pos;
+                // need to know this length in order to write the string back or copy it.
+
+                //console.log('len', len);
+                //console.log('xas2_buffer_length', xas2_buffer_length);
+
+                buf_item = Buffer.alloc(1 + xas2_buffer_length + len);
+                buf.copy(buf_item, 0, orig_pos - 1, orig_pos + len + xas2_buffer_length + 1);
+
+                pos = pos + len;
+            } else if (i_byte_value_type === BOOL_TRUE || i_byte_value_type === BOOL_FALSE || i_byte_value_type === NULL) {
+                //arr_items.push(true);
+                buf_item = Buffer.alloc(1);
+                buf_item.writeUInt8(i_byte_value_type, 0);
+
+            } else {
+                console.trace();
+                throw 'stop';
+            }
+
+            arr_buf_res.push(buf_item);
+
+
+
+
+
+        } else {
+            // skip this, advance the position
+            if (i_byte_value_type === XAS2) {
+                [i_res, pos] = xas2.skip(buf, pos);
+            } else if (i_byte_value_type === DOUBLEBE) {
+                pos = pos + 8;
+            } else if (i_byte_value_type === 2) {
+
+            } else if (i_byte_value_type === 3) {
+
+            } else if (i_byte_value_type === STRING) {
+                [str_len, pos] = xas2.read(buf, pos);
+                pos = pos + str_len;
+            } else if (i_byte_value_type === 5) {
+
+            } else if (i_byte_value_type === 5) {
+
+            } else if (i_byte_value_type === BOOL_TRUE) {
+                //arr_items.push(true);
+            } else if (i_byte_value_type === BOOL_FALSE) {
+                //arr_items.push(false);
+            } else if (i_byte_value_type === NULL) {
+                //arr_items.push(null);
+            } else if (i_byte_value_type === BUFFER) {
+                [buf_len, pos] = xas2.read(buf, pos);
+                //var buf2 = Buffer.alloc(buf_len);
+                buf.copy(buf2, 0, pos, pos + buf_len);
+                arr_items.push(buf2);
+            } else if (i_byte_value_type === ARRAY) {
+                [buf_len, pos] = xas2.read(buf, pos);
+                pos = pos + buf_len;
+            } else if (i_byte_value_type === OBJECT) {
+                let pos_start = pos;
+                [buf_len, pos] = xas2.read(buf, pos);
+                let read_end = pos_start + buf_len;
+                //let obj = {};
+
+                let k_l, v_l, buf_k, buf_v, k, v;
+
+                let read_complete = false;
+
+                while (!read_complete) {
+                    [k_l, pos] = xas2.read(buf, pos);
+                    //console.log('k_l', k_l);
+                    buf_k = Buffer.alloc(k_l);
+                    //buf.copy(buf_k, 0, pos, pos + buf_len);
+                    pos = pos + k_l;
+                    //k = buf_k.toString();
+                    [v_l, pos] = xas2.read(buf, pos);
+                    //console.log('v_l', v_l);
+                    //buf_v = Buffer.alloc(v_l);
+                    //buf.copy(buf_v, 0, pos, pos + buf_len);
+                    pos = pos + v_l;
+                    //v = decode_buffer(buf_v)[0];
+                    //obj[k] = v;
+                    if (pos >= read_end) read_complete = true;
+                }
+                //arr_items.push(obj);
+            } else if (i_byte_value_type === COMPRESSED_BUFFER) {
+                [compression_type, pos] = xas2.read(buf, pos);
+                [compressed_length, pos] = xas2.read(buf, pos);
+                var buf_comp = Buffer.alloc(compressed_length);
+                buf.copy(buf_comp, 0, pos, pos + compressed_length);
+
+                if (compression_type === COMPRESSION_ZLIB_9) {
+                    buf_uncomp = zlib_uncompress_buffer(buf_comp);
+                } else {
+                    throw 'unknown compression type ' + compression_type;
+                }
+
+                // just return the buffer?
+                //var decoded = 
+                arr_items.push(buf_uncomp);
+                pos = pos + compressed_length;
+
+
+                //var decoded = decode_buffer(buf_uncomp);
+
+
+            } else {
+                console.trace();
+                //throw 'stop';
+                throw 'Unexpected i_byte_value_type', i_byte_value_type;
+            }
+        }
+        if (pos >= l) complete = true;
+    }
+
+    return [Buffer.concat(arr_buf_res), c_idx];
+
+
+}
+
+
 // Want to encode and decode single items
 //  This looks very skippable for selecting individual items from a buffer.
 
-let decode_buffer_select_by_index = (buf, arr_int_indexes) => {
+let decode_buffer_select_by_index = (buf, arr_int_indexes, num_kps, num_kps_to_skip, idx_start = 0) => {
+
+    // number of kps, so we can read them.
+
+    // number of kps to skip...
+    //  to leave out the kp
+
+    // 
+
+    //console.log('arr_int_indexes', arr_int_indexes);
+    //console.log('num_kps, num_kps_to_skip', num_kps, num_kps_to_skip);
+
+
+
+
 
     var arr_items = [];
     var pos = 0;
@@ -931,16 +1177,55 @@ let decode_buffer_select_by_index = (buf, arr_int_indexes) => {
     var compression_type, compressed_length, buf_uncomp;
 
     let map_indexes_to_select = {};
-    each(arr_int_indexes, item => map_indexes_to_select[item] = true);
+
+
+
+
+    // Could use the subtraction here.
+
+    each(arr_int_indexes, item => map_indexes_to_select[item - idx_start] = true);
 
     //console.log('pos', pos);
     //if (pos >= l - 1) complete = true;
-    if (pos >= l) complete = true;
+
 
 
     // Skips decoding of items not in the right idx.
 
     let c_idx = 0;
+    let num_skipped_kps = 0;
+    let num_read_kps = 0;
+
+    //console.log('buf', buf);
+
+    let kp;
+    // need to read the KPs.
+
+    console.log('num_kps, num_kps_to_skip', num_kps, num_kps_to_skip);
+
+    while (num_read_kps++ < num_kps) {
+        [kp, pos] = xas2.read(buf, pos);
+
+        //console.log('kp', kp);
+
+        if (num_skipped_kps < num_kps_to_skip) {
+            num_skipped_kps++;
+            num_read_kps++;
+        } else {
+            num_read_kps++
+            arr_items.push(kp);
+        }
+
+    }
+
+    //console.log('arr_items', arr_items);
+
+
+
+
+
+    if (pos >= l) complete = true;
+
 
     while (!complete) {
         i_byte_value_type = buf.readUInt8(pos++);
@@ -961,7 +1246,9 @@ let decode_buffer_select_by_index = (buf, arr_int_indexes) => {
         // 6 - bool, 1 byte
 
 
-        if (map_indexes_to_select[c_idx++]) {
+        if (map_indexes_to_select[(c_idx++)]) {
+
+
 
             if (i_byte_value_type === XAS2) {
                 [i_res, pos] = xas2.read(buf, pos);
@@ -1145,7 +1432,13 @@ let decode_buffer_select_by_index = (buf, arr_int_indexes) => {
         if (pos >= l) complete = true;
     }
 
-    return arr_items;
+    // also want to return the c_idx
+    //  but that changes the API.
+    //  seems important to return that here.
+
+    //console.log('[arr_items, c_idx]', [arr_items, c_idx]);
+
+    return [arr_items, c_idx];
 
 
 
@@ -1153,7 +1446,7 @@ let decode_buffer_select_by_index = (buf, arr_int_indexes) => {
 
 }
 
-var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_prefixes = 0) {
+var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_prefixes = 0, starting_pos = 0) {
 
     // Always an array of items.
 
@@ -1186,7 +1479,7 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
 
     var arr_items = [];
     var i_prefix;
-    var pos = 0;
+    var pos = starting_pos;
 
     //console.log('decode_buffer', buf);
 
@@ -1432,7 +1725,8 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
 //  Because of the whole row and record encoding system, we need to decode into an array when not reading it sequentially.
 //  Decoding iterator would be useful.
 
-
+Binary_Encoding.buffer_select_from_buffer = buffer_select_from_buffer;
+Binary_Encoding.decode_buffer_select_by_index = decode_buffer_select_by_index;
 
 
 Binary_Encoding.decode = decode_buffer;
