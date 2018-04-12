@@ -1521,7 +1521,7 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
 
     while (!complete) {
         i_byte_value_type = buf.readUInt8(pos++);
-        //console.log('i_byte_value_type', i_byte_value_type);
+        //console.log('** i_byte_value_type', i_byte_value_type);
         //console.log('buf', buf);
         //console.log('pos', pos);
         //console.log('has_xas2_prefix', has_xas2_prefix);
@@ -1565,6 +1565,8 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
         } else if (i_byte_value_type === NULL) {
             arr_items.push(null);
         } else if (i_byte_value_type === BUFFER) {
+
+            console.log('i_byte_value_type === BUFFER');
 
             [buf_len, pos] = xas2.read(buf, pos);
             // It's length encoded in the buffer.
