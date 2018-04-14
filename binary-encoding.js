@@ -706,6 +706,59 @@ var flexi_encode_item = Binary_Encoding.flexi_encode_item = (item) => {
 }
 
 
+let xas2_sequence_to_array_buffer = (buf_xas2_sequence) => {
+
+    // Put 7 in front of them, a byte for ARRAY
+    //  Then 
+    // 
+
+    let res = Buffer.concat([xas2(ARRAY).buffer, xas2(buf_xas2_sequence.length).buffer, buf_xas2_sequence]);
+    return res;
+    // 
+
+
+    /*
+
+    // probably best to read them all.
+    let xas2s = [],
+        x;
+    let pos = 0;
+    let l = buf_xas2_sequence.length,
+        c;
+
+    // 
+
+    while (pos < l) {
+
+        // Want to read an xas2.
+        let v;
+        [v, pos] = xas2.read_buffer(buf_xas2_sequence, pos);
+        let x = xas2(v);
+        console.log('x', x);
+        xas2s.push(x);
+    }
+    let buf_res = Buffer.alloc(l + xas2s.length + 1);
+    buf_res.writeUInt8(ARRAY, 0, true);
+
+    l = xas2s.length;
+    pos = 1;
+
+
+
+    for (c = 0; c < l; c++) {
+        buf_res.writeUInt8(XAS2, pos++, true);
+        pos = xas2s[c].write(buf_res);
+    }
+
+    return buf_res;
+
+    */
+
+
+
+
+}
+
 
 var encode_to_buffer = function (arr_items, key_prefix) {
     // Putting in a single key prefix.
@@ -1723,6 +1776,35 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
 
 }
 
+
+let remove_kp = buf => {
+    let pos = 0,
+        x;
+
+    [x, pos] = xas2.skip(buf, pos);
+    let res = Buffer.alloc(buf.length - pos);
+    buf.copy(res, 0, pos);
+    return res;
+
+}
+
+let array_join_encoded_buffers = (arr_bufs) => {
+
+    // Have an array of buffers, but they are not specifically encoded as an array.
+    //  
+
+    let bufs_res = [];
+    each(arr_bufs, buf_item => {
+        bufs_res.push(Buffer.concat([xas2(ARRAY).buffer, xas2(buf_item.length).buffer, buf_item]));
+    });
+
+    //console.log('array_join_encoded_buffers bufs_res', bufs_res);
+
+    return Buffer.concat(bufs_res);
+
+
+}
+
 // Could have decode_item function if fishing it out of an array is a problem.
 //  Because of the whole row and record encoding system, we need to decode into an array when not reading it sequentially.
 //  Decoding iterator would be useful.
@@ -1742,6 +1824,10 @@ Binary_Encoding.decode_first_value_xas2_from_buffer = decode_first_value_xas2_fr
 Binary_Encoding.encode_to_buffer = encode_to_buffer;
 Binary_Encoding.full_decode = full_decode;
 Binary_Encoding.compress_buffer_zlib9 = compress_buffer_zlib9;
+
+Binary_Encoding.remove_kp = remove_kp;
+Binary_Encoding.xas2_sequence_to_array_buffer = xas2_sequence_to_array_buffer;
+Binary_Encoding.array_join_encoded_buffers = array_join_encoded_buffers;
 
 module.exports = Binary_Encoding;
 
