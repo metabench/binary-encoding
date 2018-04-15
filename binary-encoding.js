@@ -708,55 +708,9 @@ var flexi_encode_item = Binary_Encoding.flexi_encode_item = (item) => {
 
 let xas2_sequence_to_array_buffer = (buf_xas2_sequence) => {
 
-    // Put 7 in front of them, a byte for ARRAY
-    //  Then 
-    // 
 
     let res = Buffer.concat([xas2(ARRAY).buffer, xas2(buf_xas2_sequence.length).buffer, buf_xas2_sequence]);
     return res;
-    // 
-
-
-    /*
-
-    // probably best to read them all.
-    let xas2s = [],
-        x;
-    let pos = 0;
-    let l = buf_xas2_sequence.length,
-        c;
-
-    // 
-
-    while (pos < l) {
-
-        // Want to read an xas2.
-        let v;
-        [v, pos] = xas2.read_buffer(buf_xas2_sequence, pos);
-        let x = xas2(v);
-        console.log('x', x);
-        xas2s.push(x);
-    }
-    let buf_res = Buffer.alloc(l + xas2s.length + 1);
-    buf_res.writeUInt8(ARRAY, 0, true);
-
-    l = xas2s.length;
-    pos = 1;
-
-
-
-    for (c = 0; c < l; c++) {
-        buf_res.writeUInt8(XAS2, pos++, true);
-        pos = xas2s[c].write(buf_res);
-    }
-
-    return buf_res;
-
-    */
-
-
-
-
 }
 
 
@@ -1535,6 +1489,7 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
     var pos = starting_pos;
 
     //console.log('decode_buffer', buf);
+    //console.log('decode_buffer l', buf.length);
 
     //console.log('num_xas2_prefixes', num_xas2_prefixes);
 
@@ -1619,11 +1574,11 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
             arr_items.push(null);
         } else if (i_byte_value_type === BUFFER) {
 
-            console.log('i_byte_value_type === BUFFER');
+            //console.log('i_byte_value_type === BUFFER');
 
             [buf_len, pos] = xas2.read(buf, pos);
             // It's length encoded in the buffer.
-            //console.log('buf_len', buf_len);
+            //console.log('BUFFER buf_len', buf_len);
 
             var buf2 = Buffer.alloc(buf_len);
             buf.copy(buf2, 0, pos, pos + buf_len);
@@ -1633,6 +1588,7 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
 
             //throw 'stop';
             arr_items.push(buf2);
+            pos = pos + buf_len;
         } else if (i_byte_value_type === ARRAY) {
             //console.log('reading array');
 
@@ -1793,17 +1749,96 @@ let array_join_encoded_buffers = (arr_bufs) => {
     // Have an array of buffers, but they are not specifically encoded as an array.
     //  
 
+    // No, say this is an array at the start.
+    //  Don't encode that each item is an array?
+
+    // Or make another function that works differently.
+
+
+    // This function takes each of the buffers with no type enoding, turns it into a single buffer.
+
+    // Fixes this to do what I expect.
+
     let bufs_res = [];
+    let l = 0;
     each(arr_bufs, buf_item => {
-        bufs_res.push(Buffer.concat([xas2(ARRAY).buffer, xas2(buf_item.length).buffer, buf_item]));
+        //bufs_res.push(Buffer.concat([xas2(ARRAY).buffer, xas2(buf_item.length).buffer, buf_item]));
+        bufs_res.push(buf_item);
+        l = l + buf_item.length;
     });
 
     //console.log('array_join_encoded_buffers bufs_res', bufs_res);
 
-    return Buffer.concat(bufs_res);
+    return Buffer.concat([xas2(ARRAY).buffer, xas2(l).buffer, Buffer.concat(bufs_res)]);
 
 
 }
+
+
+// encode buffers as array buffer (of buffers)
+//  Like above, but will encode each of those items as arrays.
+
+
+
+// Will wind up using a more functional style for manipulating these buffers.
+
+
+let remove_bytes_from_start_of_buffers = (arr_bufs, n) => {
+    let l = arr_bufs.length;
+    let res = new Array(l);
+    for (let c = 0; c < l; c++) {
+
+        res[c] = Buffer.alloc(arr_bufs[c].length - n);
+        arr_bufs[c].copy(res[c], 0, n);
+        //res.push(buf);
+    }
+    return res;
+}
+
+let add_buffer_to_start_of_buffers = (buf, arr_bufs) => {
+    let l = arr_bufs.length,
+        l_buf = buf.length;
+    let res = new Array(l);
+    for (let c = 0; c < l; c++) {
+        res[c] = Buffer.concat([buf, arr_bufs[c]]);
+    }
+    return res;
+}
+
+let encode_buffers_as_buffers = (arr_bufs) => {
+    let l = arr_bufs.length;
+    let res = new Array(l);
+    for (let c = 0; c < l; c++) {
+        res[c] = encode_to_buffer([arr_bufs[c]]);
+    }
+    console.log('encode_buffers_as_buffers res', res);
+    return res;
+}
+
+
+
+// array_encoded_buffers
+
+let encode_buffers_as_array_buffer = (arr_bufs) => {
+    return array_join_encoded_buffers(encode_buffers_as_buffers(arr_bufs));
+}
+
+// encode buffer as array buffer
+//  single buffer, contains items
+
+let encode_buffer_as_array_buffer = (buf) => {
+    return Buffer.concat([xas2(ARRAY).buffer, xas2(buf.length).buffer, buf]);
+}
+
+
+
+
+
+
+
+
+// add buffer to start of buffer
+// multi_xas2_buffer()
 
 // Could have decode_item function if fishing it out of an array is a problem.
 //  Because of the whole row and record encoding system, we need to decode into an array when not reading it sequentially.
@@ -1828,6 +1863,11 @@ Binary_Encoding.compress_buffer_zlib9 = compress_buffer_zlib9;
 Binary_Encoding.remove_kp = remove_kp;
 Binary_Encoding.xas2_sequence_to_array_buffer = xas2_sequence_to_array_buffer;
 Binary_Encoding.array_join_encoded_buffers = array_join_encoded_buffers;
+Binary_Encoding.remove_bytes_from_start_of_buffers = remove_bytes_from_start_of_buffers;
+Binary_Encoding.add_buffer_to_start_of_buffers = add_buffer_to_start_of_buffers;
+Binary_Encoding.encode_buffers_as_buffers = encode_buffers_as_buffers;
+Binary_Encoding.encode_buffer_as_array_buffer = encode_buffer_as_array_buffer;
+Binary_Encoding.encode_buffers_as_array_buffer = encode_buffers_as_array_buffer;
 
 module.exports = Binary_Encoding;
 
