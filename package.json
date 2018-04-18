@@ -12,11 +12,11 @@
     "url": "https://github.com/metabench/binary-encoding.git"
   },
   "dependencies": {
-    "xas2": "^0.0.14",
+    "xas2": "^0.0.16",
     "lang-mini": "^0.0.5"
   },
   "files": [
     "binary-encoding.js"
   ],
-  "version": "0.0.46"
+  "version": "0.0.48"
 }

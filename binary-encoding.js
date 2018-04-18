@@ -938,6 +938,22 @@ var full_decode = function (buf, num_xas2_prefixes = 0) {
 
 
 
+// Think we need a split_encoded_buffer.
+//  It skips through the buffer, copying data to result buffers.
+//   This will be useful in unpaging, where the client may still want access to the lower level buffers as if it had not been through the paging system.
+//   Designing it now so that the client and the server calls have got the same APIs, but in the client case there are various steps in between that get hidden in normal operation, though parameters
+//    for it will be available.
+
+// Moving towards more processing of encoded data.
+//  I expect it to be much faster, or at least eliminate one possible bottleneck while some others will remain.
+//  The binary encoding functions will also be relatively easy to port to C/C++, and if widely used in the app will gain a nice speedup from doing that.
+
+
+
+
+
+
+// copy all buffers to result buffer
 
 let buffer_select_from_buffer = (buf, arr_int_indexes, num_kps_encoded, num_kps_to_skip, starting_idx = 0) => {
 
@@ -1732,6 +1748,82 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
 
 }
 
+let count_encoded_items = buf => {
+    let c = 0,
+        pos = 0,
+        l = buf.length,
+        complete = false;
+    if (pos >= l) complete = true;
+
+
+
+    while (!complete) {
+        i_byte_value_type = buf.readUInt8(pos++);
+        // Could have BOOL_TRUE and BOOL_FALSE as separate items.
+
+        // 0 - xas2 number
+        // 1 - 64 bit BE float
+        // 2 - unix time in ms           t
+        // 3 - unix time range in ms     [t, t]
+        // 4 - string                    [xas2(l), str]  'utf8'
+        // 5 - indexed xas2 number, representing a string
+        // 6 - bool, 1 byte
+
+        if (i_byte_value_type === XAS2) {
+            [i_res, pos] = xas2.skip(buf, pos);
+        } else if (i_byte_value_type === DOUBLEBE) {
+            pos = pos + 8;
+        } else if (i_byte_value_type === 2) {
+
+        } else if (i_byte_value_type === 3) {
+
+        } else if (i_byte_value_type === STRING) {
+            [str_len, pos] = xas2.read(buf, pos);
+            pos = pos + str_len;
+        } else if (i_byte_value_type === 5) {
+
+        } else if (i_byte_value_type === BOOL_TRUE) {} else if (i_byte_value_type === BOOL_FALSE) {} else if (i_byte_value_type === NULL) {} else if (i_byte_value_type === BUFFER) {
+            // No, does not read 
+
+            //[buf_len, pos] = xas2.read(buf, pos);
+            // There is no buf len for these I think.
+
+            //buf.copy(buf2, 0, pos, pos + buf_len);
+            //arr_items.push(buf2);
+        } else if (i_byte_value_type === ARRAY) {
+            [buf_len, pos] = xas2.read(buf, pos);
+            pos = pos + buf_len;
+        } else if (i_byte_value_type === OBJECT) {
+            [buf_len, pos] = xas2.read(buf, pos);
+            pos = pos + buf_len;
+        } else if (i_byte_value_type === COMPRESSED_BUFFER) {
+            // Have the full length first, would be a useful convention.
+
+            // CHANGE COMPRESSED_BUFFER elsewhere
+
+            [compressed_length, pos] = xas2.read(buf, pos);
+            [compression_type, pos] = xas2.read(buf, pos);
+
+
+
+            pos = pos + compressed_length;
+        } else {
+            console.trace();
+            //throw 'stop';
+            throw 'Unexpected i_byte_value_type', i_byte_value_type;
+        }
+
+        c++;
+
+
+        if (pos >= l) complete = true;
+    }
+
+    return c;
+
+
+}
+
 
 let remove_kp = buf => {
     let pos = 0,
@@ -1811,7 +1903,7 @@ let encode_buffers_as_buffers = (arr_bufs) => {
     for (let c = 0; c < l; c++) {
         res[c] = encode_to_buffer([arr_bufs[c]]);
     }
-    console.log('encode_buffers_as_buffers res', res);
+    //console.log('encode_buffers_as_buffers res', res);
     return res;
 }
 
@@ -1830,10 +1922,96 @@ let encode_buffer_as_array_buffer = (buf) => {
     return Buffer.concat([xas2(ARRAY).buffer, xas2(buf.length).buffer, buf]);
 }
 
+// Not sure how useful this will be
+let encode_to_marked_buffer = (arr) => {
+    return encode_to_buffer(encode_to_buffer(arr)[0]);
+}
+
+
+// Does not handle KPs, it's not for that kind of data.
+//  Written to handle unpaging of binary data to separated binary data.
+let split_encoded_buffer = (buf, pos = 0) => {
+    let arr_buf_res = [];
+    var l = buf.length;
+    var i_byte_value_type, buffer_length;
+    var complete = false;
+
+    if (pos >= l) complete = true;
 
 
 
 
+    // Skip necessary kps.
+
+
+
+    // Skips decoding of items not in the right idx.
+
+    let buf_item, buf_xas2_item;
+
+    while (!complete) {
+        i_byte_value_type = buf.readUInt8(pos++);
+        //console.log('1) i_byte_value_type', i_byte_value_type);
+        if (i_byte_value_type === XAS2) {
+            [buf_xas2_item, pos] = xas2.read_buffer(buf, pos);
+            buf_item = Buffer.concat([xas2(0).buffer, buf_xas2_item]);
+        } else if (i_byte_value_type === DOUBLEBE) {
+            buf_item = Buffer.alloc(9);
+            buf_item.writeUInt8(i_byte_value_type, 0);
+            buf.copy(buf_item, 1, pos, pos + 8);
+            pos = pos + 8;
+        } else if (i_byte_value_type === STRING || i_byte_value_type === BUFFER || i_byte_value_type === ARRAY || i_byte_value_type === OBJECT) {
+            // xas2 read return the number of characters read too?
+            let orig_pos = pos;
+            [len, pos, xas2_buffer_length] = xas2.read(buf, pos);
+            xas2_buffer_length = pos - orig_pos;
+            buf_item = Buffer.alloc(1 + xas2_buffer_length + len);
+            buf.copy(buf_item, 0, orig_pos - 1, orig_pos + len + xas2_buffer_length + 1);
+            pos = pos + len;
+        } else if (i_byte_value_type === BOOL_TRUE || i_byte_value_type === BOOL_FALSE || i_byte_value_type === NULL) {
+            //arr_items.push(true);
+            buf_item = Buffer.alloc(1);
+            buf_item.writeUInt8(i_byte_value_type, 0);
+        } else {
+            console.log('i_byte_value_type', i_byte_value_type);
+            console.trace();
+            throw 'stop';
+        }
+        arr_buf_res.push(buf_item);
+        if (pos >= l) complete = true;
+    }
+    //console.log('arr_buf_res', arr_buf_res);
+    return arr_buf_res;
+}
+
+// Not sure about this now.
+let split_array_encoded_buffer = (buf) => {
+    let res = [],
+        length;
+
+    // the array encoded buffer will start with xas2(ARRAY)
+
+    let [encoding_id, pos] = xas2.read(buf, 0);
+    console.log('encoding_id', encoding_id);
+    [length, pos] = xas2.read(buf, pos);
+    console.log('length', length);
+
+    if (encoding_id === ARRAY) {
+        console.log('splitting array encoded buffer');
+
+        return split_encoded_buffer(buf, pos);
+
+
+
+    } else {
+        throw 'split_array_encoded_buffer expects array encoded buffer, read encoding_id ' + encoding_id;
+    }
+
+
+    // look through this buf, copying the content bufs.
+
+    //return res;
+}
 
 
 
@@ -1846,7 +2024,6 @@ let encode_buffer_as_array_buffer = (buf) => {
 
 Binary_Encoding.buffer_select_from_buffer = buffer_select_from_buffer;
 Binary_Encoding.decode_buffer_select_by_index = decode_buffer_select_by_index;
-
 
 Binary_Encoding.decode = decode_buffer;
 Binary_Encoding.encode = flexi_encode_item;
@@ -1868,6 +2045,14 @@ Binary_Encoding.add_buffer_to_start_of_buffers = add_buffer_to_start_of_buffers;
 Binary_Encoding.encode_buffers_as_buffers = encode_buffers_as_buffers;
 Binary_Encoding.encode_buffer_as_array_buffer = encode_buffer_as_array_buffer;
 Binary_Encoding.encode_buffers_as_array_buffer = encode_buffers_as_array_buffer;
+
+// Encoding where we 
+
+Binary_Encoding.split_encoded_buffer = split_encoded_buffer;
+Binary_Encoding.split_array_encoded_buffer = split_array_encoded_buffer;
+Binary_Encoding.encode_to_marked_buffer = encode_to_marked_buffer;
+Binary_Encoding.count_encoded_items = count_encoded_items;
+
 
 module.exports = Binary_Encoding;
 
