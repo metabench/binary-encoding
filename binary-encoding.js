@@ -12,7 +12,9 @@ Better for recursive reads, with layers of encoding.
 //  Not sure about changing the way the server provides them.
 //  Need to change the way that records are saved in backups.
 
-
+// Or encode as an array of buffers for the moment.
+//  That seems OK, general enough.
+//   At some stages would need to decode the buffers, or split them.
 
  
  */
@@ -417,8 +419,6 @@ class Binary_Record_Encoding {
 
         // Encodes the key and value to separate buffers.
 
-
-
         return res;
 
     }
@@ -714,6 +714,36 @@ let xas2_sequence_to_array_buffer = (buf_xas2_sequence) => {
 }
 
 
+// encode_to_buffer_use_kps
+
+
+let encode_to_buffer_use_kps = (arr_items, num_kps) => {
+    let c = 0,
+        pos = 0,
+        i, l = arr_items.length;
+
+    let arr_bufs = new Array(l);
+
+    while (c < num_kps) {
+        arr_bufs[c] = new xas2(arr_items[c]).buffer;
+
+
+        c++;
+    }
+    // encode the rest
+
+    while (c < l) {
+        arr_bufs[c] = flexi_encode_item(arr_items[c]);
+        c++;
+    }
+
+    var res = Buffer.concat(arr_bufs);
+    return res;
+
+
+
+}
+
 var encode_to_buffer = function (arr_items, key_prefix) {
     // Putting in a single key prefix.
     //  Seems like it should say that records have got xas2 prefixes.
@@ -721,13 +751,6 @@ var encode_to_buffer = function (arr_items, key_prefix) {
     // This buffer does not say how it is encoded. It probably should.
     //  It's how rows get encoded.
     //  Rows could be of a data type that uses these key prefixes.
-
-
-
-
-
-
-    var a = arguments;
 
     var a = arguments;
     var arr_xas2_prefix_numbers = [];
@@ -2034,6 +2057,7 @@ Binary_Encoding.split_length_item_encoded_buffer_to_kv = split_length_item_encod
 Binary_Encoding.split_length_item_encoded_buffer = split_length_item_encoded_buffer;
 Binary_Encoding.decode_first_value_xas2_from_buffer = decode_first_value_xas2_from_buffer;
 Binary_Encoding.encode_to_buffer = encode_to_buffer;
+Binary_Encoding.encode_to_buffer_use_kps = encode_to_buffer_use_kps;
 Binary_Encoding.full_decode = full_decode;
 Binary_Encoding.compress_buffer_zlib9 = compress_buffer_zlib9;
 
