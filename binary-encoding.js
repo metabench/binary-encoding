@@ -971,7 +971,215 @@ var full_decode = function (buf, num_xas2_prefixes = 0) {
 //  I expect it to be much faster, or at least eliminate one possible bottleneck while some others will remain.
 //  The binary encoding functions will also be relatively easy to port to C/C++, and if widely used in the app will gain a nice speedup from doing that.
 
+// Buffer select item.
+// Could maybe select all of the items at once though.
 
+
+
+// get value at
+//  starting pos
+//  kps can be skipped before, want kps to be less of a focus here.
+
+
+
+// want to get something to skip through reading it.
+
+// read_skip()
+
+// get_pos_list
+//  could return a Typed Array.
+
+let get_pos = (buf, idx, pos = 0) => {
+    var l = buf.length,
+        complete = false;
+    var i_byte_value_type, buffer_length;
+
+
+    // Will need to skip through.
+
+    let i = 0;
+
+    if (i >= idx - 1 || pos >= l) complete = true;
+
+    while (!complete) {
+        i_byte_value_type = buf.readUInt8(pos++);
+
+        if (i_byte_value_type === XAS2) {
+            [i_res, pos] = xas2.skip(buf, pos);
+        } else if (i_byte_value_type === DOUBLEBE) {
+            pos = pos + 8;
+        } else if (i_byte_value_type === 2) {
+
+        } else if (i_byte_value_type === 3) {
+
+        } else if (i_byte_value_type === STRING) {
+            [str_len, pos] = xas2.read(buf, pos);
+            pos = pos + str_len;
+        } else if (i_byte_value_type === 5) {
+
+        } else if (i_byte_value_type === 5) {
+
+        } else if (i_byte_value_type === BOOL_TRUE) {
+            //arr_items.push(true);
+        } else if (i_byte_value_type === BOOL_FALSE) {
+            //arr_items.push(false);
+        } else if (i_byte_value_type === NULL) {
+            //arr_items.push(null);
+        } else if (i_byte_value_type === BUFFER) {
+            [buf_len, pos] = xas2.read(buf, pos);
+            //var buf2 = Buffer.alloc(buf_len);
+            buf.copy(buf2, 0, pos, pos + buf_len);
+            arr_items.push(buf2);
+        } else if (i_byte_value_type === ARRAY) {
+            [buf_len, pos] = xas2.read(buf, pos);
+            pos = pos + buf_len;
+        } else if (i_byte_value_type === OBJECT) {
+            let pos_start = pos;
+            [buf_len, pos] = xas2.read(buf, pos);
+            let read_end = pos_start + buf_len;
+            //let obj = {};
+
+            let k_l, v_l, buf_k, buf_v, k, v;
+
+            let read_complete = false;
+
+            while (!read_complete) {
+                [k_l, pos] = xas2.read(buf, pos);
+                //console.log('k_l', k_l);
+                buf_k = Buffer.alloc(k_l);
+                //buf.copy(buf_k, 0, pos, pos + buf_len);
+                pos = pos + k_l;
+                //k = buf_k.toString();
+                [v_l, pos] = xas2.read(buf, pos);
+                //console.log('v_l', v_l);
+                //buf_v = Buffer.alloc(v_l);
+                //buf.copy(buf_v, 0, pos, pos + buf_len);
+                pos = pos + v_l;
+                //v = decode_buffer(buf_v)[0];
+                //obj[k] = v;
+                if (pos >= read_end) read_complete = true;
+            }
+            //arr_items.push(obj);
+        } else if (i_byte_value_type === COMPRESSED_BUFFER) {
+            [compression_type, pos] = xas2.read(buf, pos);
+            [compressed_length, pos] = xas2.read(buf, pos);
+            var buf_comp = Buffer.alloc(compressed_length);
+            buf.copy(buf_comp, 0, pos, pos + compressed_length);
+
+            if (compression_type === COMPRESSION_ZLIB_9) {
+                buf_uncomp = zlib_uncompress_buffer(buf_comp);
+            } else {
+                throw 'unknown compression type ' + compression_type;
+            }
+
+            // just return the buffer?
+            //var decoded = 
+            arr_items.push(buf_uncomp);
+            pos = pos + compressed_length;
+
+            //var decoded = decode_buffer(buf_uncomp);
+
+
+        } else {
+            console.trace();
+            //throw 'stop';
+            throw 'Unexpected i_byte_value_type', i_byte_value_type;
+        }
+
+        i++;
+
+        console.log('i', i);
+        console.log('idx', idx);
+
+        if (i >= idx - 1 || pos >= l) complete = true;
+    }
+
+    return pos;
+
+
+    // However, could split the encoding types into:
+    //  length by decode item (xas2)
+    //  length is encoded immediately after the item type id
+    //  fixed length so no need to calculate or decode it.
+
+
+
+
+}
+
+let read_value = (buf, pos = 0) => {
+    let i_byte_value_type = buf.readUInt8(pos++);
+
+    if (i_byte_value_type === XAS2) {
+        // Copy the xas2...
+        //console.log('reading xas2');
+        // read buffer, and return the full thing.
+        [buf_xas2_item, pos] = xas2.read_buffer(buf, pos);
+        buf_item = Buffer.concat([xas2(0).buffer, buf_xas2_item]);
+        //console.log('[buf_item, pos]', [buf_item, pos]);
+
+        //[i_res, pos] = xas2.skip(buf, pos);
+    } else if (i_byte_value_type === DOUBLEBE) {
+        // Read this value.
+        //  copy given length to other buffer
+        buf_item = Buffer.alloc(9);
+        buf_item.writeUInt8(i_byte_value_type, 0);
+        buf.copy(buf_item, 1, pos, pos + 8);
+        pos = pos + 8;
+        //} else if (i_byte_value_type === 2) {
+
+        //} else if (i_byte_value_type === 3) {
+
+    } else if (i_byte_value_type === STRING || i_byte_value_type === BUFFER || i_byte_value_type === ARRAY || i_byte_value_type === OBJECT) {
+        // xas2 read return the number of characters read too?
+        let orig_pos = pos;
+        [len, pos, xas2_buffer_length] = xas2.read(buf, pos);
+
+        xas2_buffer_length = pos - orig_pos;
+        // need to know this length in order to write the string back or copy it.
+
+        //console.log('len', len);
+        //console.log('xas2_buffer_length', xas2_buffer_length);
+
+        buf_item = Buffer.alloc(1 + xas2_buffer_length + len);
+        buf.copy(buf_item, 0, orig_pos - 1, orig_pos + len + xas2_buffer_length + 1);
+
+        pos = pos + len;
+    } else if (i_byte_value_type === BOOL_TRUE || i_byte_value_type === BOOL_FALSE || i_byte_value_type === NULL) {
+        // Size 1 byte.
+        //arr_items.push(true);
+        buf_item = Buffer.alloc(1);
+        buf_item.writeUInt8(i_byte_value_type, 0);
+
+    } else {
+        console.trace();
+        throw 'stop';
+    }
+
+    return [buf_item, pos];
+
+}
+
+let get_value_at = (buf, idx, pos = 0) => {
+    let res;
+    // skip until that place.
+    pos = get_pos(buf, idx, pos);
+    //console.log('pos', pos);
+    //console.log('buf', buf);
+
+    [res, pos] = read_value(buf, pos);
+    //console.log('res', res);
+
+    return res;
+
+    // Then need to read a single value.
+    // Could do with a function for that.
+
+
+
+
+
+}
 
 
 
@@ -1083,6 +1291,8 @@ let buffer_select_from_buffer = (buf, arr_int_indexes, num_kps_encoded, num_kps_
 
                 pos = pos + len;
             } else if (i_byte_value_type === BOOL_TRUE || i_byte_value_type === BOOL_FALSE || i_byte_value_type === NULL) {
+                // Size 1 byte.
+
                 //arr_items.push(true);
                 buf_item = Buffer.alloc(1);
                 buf_item.writeUInt8(i_byte_value_type, 0);
@@ -1744,40 +1954,20 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
         if (pos >= l) complete = true;
     }
 
-    // Seems like a bit of a hack. Would fix / break things in other places.
-    //  Need to specifically cater for returning an array with length 1.
-
-    /*
-    if (arr_items.length === 1) {
-        if (i_byte_value_type === ARRAY) {
-            //return arr_items;
-            //return arr_items[0];
-        } else {
-            return arr_items[0];
-        }
-
-
-    } else {
-        return arr_items;
-    }
-    */
-
     return arr_items;
-
-
-
 
     //if ()
 
 }
 
-let count_encoded_items = buf => {
+let count_encoded_items = (buf, pos = 0) => {
     let c = 0,
-        pos = 0,
+        //pos = 0,
         l = buf.length,
         complete = false;
     if (pos >= l) complete = true;
 
+    //console.log('buf', buf);
 
 
     while (!complete) {
@@ -2076,6 +2266,10 @@ Binary_Encoding.split_encoded_buffer = split_encoded_buffer;
 Binary_Encoding.split_array_encoded_buffer = split_array_encoded_buffer;
 Binary_Encoding.encode_to_marked_buffer = encode_to_marked_buffer;
 Binary_Encoding.count_encoded_items = count_encoded_items;
+Binary_Encoding.get_value_at = get_value_at;
+Binary_Encoding.get_pos = get_pos;
+Binary_Encoding.read_value = read_value;
+
 
 
 module.exports = Binary_Encoding;
