@@ -999,7 +999,9 @@ let get_pos = (buf, idx, pos = 0) => {
 
     let i = 0;
 
-    if (i >= idx - 1 || pos >= l) complete = true;
+    if (i >= idx || pos >= l) complete = true;
+    // Seems to have fixed retrieval problem.
+    //if (i >= idx - 1 || pos >= l) complete = true;
 
     while (!complete) {
         i_byte_value_type = buf.readUInt8(pos++);
@@ -1164,8 +1166,8 @@ let get_value_at = (buf, idx, pos = 0) => {
     let res;
     // skip until that place.
     pos = get_pos(buf, idx, pos);
-    //console.log('pos', pos);
-    //console.log('buf', buf);
+    console.log('pos', pos);
+    console.log('buf', buf);
 
     [res, pos] = read_value(buf, pos);
     //console.log('res', res);
@@ -1727,12 +1729,6 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
     // If there are any xas2 prefixes it puts all of the results in an array.
 
 
-
-
-
-
-
-
     var arr_items = [];
     var i_prefix;
     var pos = starting_pos;
@@ -1947,7 +1943,11 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
 
 
         } else {
-            console.trace();
+
+            // Don't want tracing now it's used for validation.
+            //  Maybe a different validation procedure would be better.
+
+            //console.trace();
             //throw 'stop';
             throw 'Unexpected i_byte_value_type', i_byte_value_type;
         }
@@ -2000,8 +2000,11 @@ let count_encoded_items = (buf, pos = 0) => {
 
             //[buf_len, pos] = xas2.read(buf, pos);
             // There is no buf len for these I think.
+            [buf_len, pos] = xas2.read(buf, pos);
+            pos = pos + buf_len;
 
             //buf.copy(buf2, 0, pos, pos + buf_len);
+
             //arr_items.push(buf2);
         } else if (i_byte_value_type === ARRAY) {
             [buf_len, pos] = xas2.read(buf, pos);
@@ -2021,6 +2024,7 @@ let count_encoded_items = (buf, pos = 0) => {
 
             pos = pos + compressed_length;
         } else {
+            console.log('buf', buf);
             console.trace();
             //throw 'stop';
             throw 'Unexpected i_byte_value_type', i_byte_value_type;
