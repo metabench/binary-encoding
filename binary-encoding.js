@@ -1090,8 +1090,8 @@ let get_pos = (buf, idx, pos = 0) => {
 
         i++;
 
-        console.log('i', i);
-        console.log('idx', idx);
+        //console.log('i', i);
+        //console.log('idx', idx);
 
         if (i >= idx - 1 || pos >= l) complete = true;
     }
@@ -1166,8 +1166,8 @@ let get_value_at = (buf, idx, pos = 0) => {
     let res;
     // skip until that place.
     pos = get_pos(buf, idx, pos);
-    console.log('pos', pos);
-    console.log('buf', buf);
+    //console.log('pos', pos);
+    //console.log('buf', buf);
 
     [res, pos] = read_value(buf, pos);
     //console.log('res', res);
