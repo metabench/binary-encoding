@@ -349,17 +349,17 @@ class Binary_Encoding {
     // Should not necessarily need an encoding object.
     //  In many cases, just give it the values, and it will get on with encoding them into buffers.
 
-    'constructor' (spec) {
+    constructor(spec) {
         var arr_encodings = [];
         if (Array.isArray(spec)) {
             arr_encodings = spec;
         }
         if (arr_encodings) this.arr_encodings = arr_encodings;
     }
-    'encode' (unencoded) {
+    encode(unencoded) {
         return Binary_Encoding.encode_to_buffer(unencoded);
     }
-    'decode' (buffer, ignore_prefix) {
+    decode(buffer, ignore_prefix) {
         var arr_encodings = this.arr_encodings;
         var read_pos = 0;
         var field_name, str_type, pos, val, arr_additional_encoding_params, read_val, prefix;
@@ -381,20 +381,20 @@ class Binary_Encoding {
 
 
 class Binary_Record_Encoding {
-    'constructor' (spec) {
+    constructor(spec) {
         this.encoding = spec;
         this.key_encoding = new Binary_Encoding(spec.key);
         this.value_encoding = new Binary_Encoding(spec.value);
     }
 
-    'encode_query' (query) {
+    'encode_query'(query) {
         return this.key_encoding.encode_query(query);
     }
 
     // And a tables key prefix
     //  Something to indicate we are in the tables section of the database
 
-    'encode' (int_table_prefix, record) {
+    'encode'(int_table_prefix, record) {
         var arr_key_values = [],
             arr_value_values = [];
 
@@ -423,7 +423,7 @@ class Binary_Record_Encoding {
 
     }
 
-    'decode' (arr_key_value) {
+    'decode'(arr_key_value) {
         // And the table prefix has been removed from the buffer before it was even given to the decoder.
         //  Fixed on 02/11/2016
 
@@ -576,7 +576,7 @@ var flexi_encode_item = Binary_Encoding.flexi_encode_item = (item) => {
 
     //console.log('t_item', t_item);
 
-    //console.log('t_item', t_item);
+    console.log('flexi_encode_item t_item', t_item);
     if (t_item === 'number') {
         // is it a positive integer? xas2 only stores 0 and positive integers
         if (item === 0) {
@@ -663,30 +663,84 @@ var flexi_encode_item = Binary_Encoding.flexi_encode_item = (item) => {
         // String key, then the value encoded into a buffer
         //  prefixed with its encoded length
 
-        //console.log('encoding object');
-        i_type = OBJECT;
+        //console.log('Object.keys(item)', Object.keys(item));
+        //console.log('item', item);
 
-        let prop;
-        let arr_bufs_res = [];
-        let buf_item_item, item_item, buf_item_item_name;
+        //console.log("'buffer' in item " + ('buffer' in item));
 
-        for (prop in item) {
-            item_item = item[prop];
-            buf_item_item_name = Buffer.from(prop);
-            buf_item_item = flexi_encode_item(item_item);
-            //console.log('item_item', item_item);
-            //console.log('buf_item_item', buf_item_item);
-            arr_bufs_res.push(xas2(buf_item_item_name.length).buffer);
-            arr_bufs_res.push(buf_item_item_name);
-            arr_bufs_res.push(xas2(buf_item_item.length).buffer);
-            arr_bufs_res.push(buf_item_item);
+        if ('buffer' in item) {
+            // And then could have a specific item type too.
+            //  Could say it's a buffer but of a specific item type.
+            //  Want it to decode as a buffer as normal.
+            //   First part would itentify its specific item type.
+            //   This will help to tell the difference between a key, record, record list, row list etc.
+            //    There will be a few types used in communication representing some useful OO classes that will cover a lot of data quite simply.
+            //     Could just have a specific encoding type at the beginning of the buffer.
+
+            // a buffer xas2 prefix
+            i_type = BUFFER;
+
+            // It's still a Buffer...
+
+            let item_buf = item.buffer;
+
+            if ('buffer_xas2_prefix' in item) {
+                let prefix_buf = item.buffer_xas2_prefix;
+                //console.log('item_buf', item_buf);
+                //console.log('item.buffer_xas2_prefix', item.buffer_xas2_prefix);
+                //console.log('prefix_buf', prefix_buf);
+                //console.log('prefix_buf.length + item_buf.length', prefix_buf.length + item_buf.length);
+
+                //res = Buffer.concat([xas2(item_buf.length).buffer, item_buf]);
+
+                // Trouble decoding these.
+
+                // Want it so that some kinds of buffer have an extra encoding digit right at the beginning.
+                //  It's an XAS2 prefix.
+                //  Not so sure about enocoding / decoding like this.
+                //  Idea is to help identify what a message contains.
+
+
+
+
+                res = Buffer.concat([xas2(prefix_buf.length + item_buf.length).buffer, prefix_buf, item_buf]);
+                //console.log('res with prefix', res);
+            } else {
+
+                res = Buffer.concat([xas2(item_buf.length).buffer, item_buf]);
+            }
+
+
+        } else {
+            //console.log('encoding object');
+            i_type = OBJECT;
+
+            let prop;
+            let arr_bufs_res = [];
+            let buf_item_item, item_item, buf_item_item_name;
+
+            for (prop in item) {
+                item_item = item[prop];
+                buf_item_item_name = Buffer.from(prop);
+                buf_item_item = flexi_encode_item(item_item);
+                //console.log('item_item', item_item);
+                //console.log('buf_item_item', buf_item_item);
+                arr_bufs_res.push(xas2(buf_item_item_name.length).buffer);
+                arr_bufs_res.push(buf_item_item_name);
+                arr_bufs_res.push(xas2(buf_item_item.length).buffer);
+                arr_bufs_res.push(buf_item_item);
+            }
+
+            // Have the length of the object at the start for better skipping and reading.
+            //console.log('arr_bufs_res', arr_bufs_res);
+
+            let buf_res = Buffer.concat(arr_bufs_res);
+            res = Buffer.concat([xas2(buf_res.length).buffer, buf_res]);
         }
 
-        // Have the length of the object at the start for better skipping and reading.
-        //console.log('arr_bufs_res', arr_bufs_res);
 
-        let buf_res = Buffer.concat(arr_bufs_res);
-        res = Buffer.concat([xas2(buf_res.length).buffer, buf_res]);
+
+
     }
 
     // Maybe types should be as xas2.
@@ -1995,7 +2049,7 @@ let count_encoded_items = (buf, pos = 0) => {
             pos = pos + str_len;
         } else if (i_byte_value_type === 5) {
 
-        } else if (i_byte_value_type === BOOL_TRUE) {} else if (i_byte_value_type === BOOL_FALSE) {} else if (i_byte_value_type === NULL) {} else if (i_byte_value_type === BUFFER) {
+        } else if (i_byte_value_type === BOOL_TRUE) { } else if (i_byte_value_type === BOOL_FALSE) { } else if (i_byte_value_type === NULL) { } else if (i_byte_value_type === BUFFER) {
             // No, does not read 
 
             //[buf_len, pos] = xas2.read(buf, pos);
