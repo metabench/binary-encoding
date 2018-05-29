@@ -576,7 +576,7 @@ var flexi_encode_item = Binary_Encoding.flexi_encode_item = (item) => {
 
     //console.log('t_item', t_item);
 
-    console.log('flexi_encode_item t_item', t_item);
+    //console.log('flexi_encode_item t_item', t_item);
     if (t_item === 'number') {
         // is it a positive integer? xas2 only stores 0 and positive integers
         if (item === 0) {
