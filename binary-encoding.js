@@ -117,6 +117,7 @@ const BUFFER = 9;
 const ARRAY = 10;
 const OBJECT = 11;
 const COMPRESSED_BUFFER = 12;
+const UNDEFINED = 13;
 
 
 // Not sure about this. Using float64s looks best for now.
@@ -621,6 +622,12 @@ var flexi_encode_item = Binary_Encoding.flexi_encode_item = (item) => {
     if (t_item === 'null') {
         i_type = NULL;
     }
+
+    if (t_item === 'undefined') {
+        i_type = UNDEFINED;
+    }
+
+    // 
 
     if (t_item === 'buffer') {
         i_type = BUFFER;
@@ -1871,6 +1878,8 @@ var decode_buffer = Binary_Encoding.decode_buffer = function (buf, num_xas2_pref
             arr_items.push(false);
         } else if (i_byte_value_type === NULL) {
             arr_items.push(null);
+        } else if (i_byte_value_type === UNDEFINED) {
+            arr_items.push(undefined);
         } else if (i_byte_value_type === BUFFER) {
 
             //console.log('i_byte_value_type === BUFFER');
@@ -2239,7 +2248,7 @@ let split_encoded_buffer = (buf, pos = 0) => {
             buf_item = Buffer.alloc(1 + xas2_buffer_length + len);
             buf.copy(buf_item, 0, orig_pos - 1, orig_pos + len + xas2_buffer_length + 1);
             pos = pos + len;
-        } else if (i_byte_value_type === BOOL_TRUE || i_byte_value_type === BOOL_FALSE || i_byte_value_type === NULL) {
+        } else if (i_byte_value_type === BOOL_TRUE || i_byte_value_type === BOOL_FALSE || i_byte_value_type === NULL || i_byte_value_type === UNDEFINED) {
             //arr_items.push(true);
             buf_item = Buffer.alloc(1);
             buf_item.writeUInt8(i_byte_value_type, 0);
@@ -2388,6 +2397,10 @@ if (require.main === module) {
     //test_obj();
 
     test_obj();
+
+    test_obj([undefined, 'BTC-2GIVE', undefined, undefined]);
+
+    // [ undefined, 'BTC-2GIVE', undefined, undefined ]
     //test_encode_decode(0);
 
     //test_encode_decode(a1);
